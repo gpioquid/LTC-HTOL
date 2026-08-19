@@ -2,6 +2,9 @@
 __pycache__/
 *.py[cod]
 htol_snapshot_*.json
+.ruff_cache/
+DESIGN.md
+htol_data.json
 
 scripts/
 HTOL.py
