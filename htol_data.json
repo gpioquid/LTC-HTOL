@@ -1,0 +1,135 @@
+{
+  "live_state": {
+    "0": {
+      "etr_number": "ETR-1001",
+      "technician": "\u2014",
+      "target_hrs": 1000,
+      "hours_elapsed": 0.0,
+      "notes": "",
+      "test_start_dt": null,
+      "set_voltage": 12.0,
+      "set_current": 5.0,
+      "test_active": false,
+      "current_snap": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "temp_snap": []
+    },
+    "1": {
+      "etr_number": "ETR-1002",
+      "technician": "\u2014",
+      "target_hrs": 1000,
+      "hours_elapsed": 0.0,
+      "notes": "",
+      "test_start_dt": null,
+      "set_voltage": 5.0,
+      "set_current": 3.2,
+      "test_active": false,
+      "current_snap": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "temp_snap": []
+    },
+    "2": {
+      "etr_number": "ETR-1003",
+      "technician": "\u2014",
+      "target_hrs": 1000,
+      "hours_elapsed": 0.0,
+      "notes": "",
+      "test_start_dt": null,
+      "set_voltage": 24.0,
+      "set_current": 7.5,
+      "test_active": false,
+      "current_snap": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "temp_snap": []
+    },
+    "3": {
+      "etr_number": "ETR-1004",
+      "technician": "\u2014",
+      "target_hrs": 1000,
+      "hours_elapsed": 0.0,
+      "notes": "",
+      "test_start_dt": null,
+      "set_voltage": 15.0,
+      "set_current": 4.8,
+      "test_active": false,
+      "current_snap": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "temp_snap": []
+    },
+    "4": {
+      "etr_number": "ETR-1005",
+      "technician": "\u2014",
+      "target_hrs": 1000,
+      "hours_elapsed": 0.0,
+      "notes": "",
+      "test_start_dt": null,
+      "set_voltage": 9.0,
+      "set_current": 6.1,
+      "test_active": false,
+      "current_snap": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "temp_snap": []
+    },
+    "5": {
+      "etr_number": "ETR-1006",
+      "technician": "\u2014",
+      "target_hrs": 1000,
+      "hours_elapsed": 0.0,
+      "notes": "",
+      "test_start_dt": null,
+      "set_voltage": 3.3,
+      "set_current": 2.9,
+      "test_active": false,
+      "current_snap": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "temp_snap": []
+    }
+  },
+  "completed_tests": [],
+  "event_log": [
+    {
+      "ts": "2026-08-19T14:03:02",
+      "msg": "Data file: C:\\Users\\gpioquid\\Videos\\LTC\\HTOL\\htol_data.json"
+    },
+    {
+      "ts": "2026-08-19T14:03:05",
+      "msg": "FAULT detected on PSU5 (ETR-1005)"
+    }
+  ]
+}

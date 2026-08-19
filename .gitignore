@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.py[cod]
+htol_snapshot_*.json
+
+scripts/
+HTOL.py

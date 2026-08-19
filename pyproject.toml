@@ -1,0 +1,20 @@
+[project]
+name="htol-monitor"
+version="3.0.0"
+requires-python=">=3.12"
+dependencies=[
+    "customtkinter>=5.2.2",
+    "matplotlib>=3.9",
+    "pyqtgraph>=0.14.0",
+    "pyside6>=6.11.2",
+    "python-dotenv>=1.0",
+    "pyvisa>=1.16.2",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.3",
+]
+
+[tool.ruff.lint]
+ignore = ["DTZ005","DTZ006","DTZ901","BLE001"]
