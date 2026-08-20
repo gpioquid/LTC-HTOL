@@ -63,98 +63,506 @@ def style_ax(ax):
 class PSUDetailPopup(QDialog):
     def __init__(self, parent, psu, chamber):
         super().__init__(parent)
+
         self.psu = psu
         self.chamber = chamber
-        self.accent = ACCENTS[psu.idx]
-        self.setWindowTitle(f"PSU{psu.idx + 1} · {psu.etr_number} — Detail / History")
+        self.accent = ACCENTS[psu.idx % len(ACCENTS)]
+
+        self.setWindowTitle(f"PSU{psu.idx + 1} · {psu.etr_number} · Detail / History")
         self.resize(920, 640)
         self.setMinimumSize(700, 500)
+
         root = QVBoxLayout(self)
-        hdr = panel()
-        h = QHBoxLayout(hdr)
-        h.addWidget(label(f"◈  PSU{psu.idx + 1} · {psu.etr_number}", FML, self.accent))
-        h.addWidget(label(f"TECH: {psu.technician}", FM, C["dim"]))
-        h.addStretch()
-        h.addWidget(label("RANGE:", FMS, C["dim"]))
-        self.group = QButtonGroup(self)
-        self.ranges = {}
-        for opt in ("Live", "1h", "6h", "24h", "All"):
-            b = QRadioButton(opt)
-            self.group.addButton(b)
-            self.ranges[opt] = b
-            h.addWidget(b)
-            b.toggled.connect(self.refresh)
+        root.setContentsMargins(10, 10, 10, 10)
+        root.setSpacing(6)
+
+        self._build_header(root)
+        self._build_statistics(root)
+        self._build_notes(root)
+        self._build_charts(root)
+        self._build_refresh_button(root)
+
+        # Connect range buttons only after every UI element exists.
+        for button in self.ranges.values():
+            button.toggled.connect(self._on_range_changed)
+
         self.ranges["Live"].setChecked(True)
-        root.addWidget(hdr)
-        stats = panel()
-        sg = QGridLayout(stats)
-        self.stat = {}
-        vals = [
-            ("HOURS ON", f"{psu.hours_elapsed:.2f} h"),
-            ("TARGET", f"{psu.target_hrs} h"),
-            ("PROGRESS", f"{psu.progress_pct:.1f}%"),
-            ("CURRENT", f"{psu.current_a:.3f} A"),
-            ("VOLTAGE", f"{psu.voltage_v:.3f} V"),
-            ("STATUS", psu.status_str),
-        ]
-        for i, (k, v) in enumerate(vals):
-            sg.addWidget(label(k, FMS, C["dim"]), 0, i)
-            self.stat[k] = label(v, FMB, self.accent)
-            sg.addWidget(self.stat[k], 1, i)
-        self.on_range = label("ON-TIME IN RANGE: — h", FM, C["cyan"])
-        sg.addWidget(self.on_range, 2, 0, 1, 6)
-        root.addWidget(stats)
-        self.notes = label(psu.notes or "—", FMS, C["text"])
-        self.notes.setWordWrap(True)
-        root.addWidget(self.notes)
-        self.fig = Figure(figsize=(7, 4), dpi=96, facecolor=PLOT_BG)
-        self.a1 = self.fig.add_subplot(211)
-        self.a2 = self.fig.add_subplot(212)
-        for ax in (self.a1, self.a2):
-            style_ax(ax)
-        (self.l1,) = self.a1.plot([], [], color=self.accent)
-        (self.l2,) = self.a2.plot([], [], color=C["orange"])
-        self.canvas = FigureCanvasQTAgg(self.fig)
-        root.addWidget(self.canvas, 1)
-        b = QPushButton("↻ REFRESH")
-        b.clicked.connect(self.refresh)
-        b.setStyleSheet(button_style(self.accent))
-        root.addWidget(b, 0, Qt.AlignHCenter)
+
+        # Covers the case where the radio button does not emit.
         self.refresh()
 
-    def refresh(self):
-        p = self.psu
-        self.stat["HOURS ON"].setText(f"{p.hours_elapsed:.2f} h")
-        self.stat["PROGRESS"].setText(f"{p.progress_pct:.1f}%")
-        self.stat["CURRENT"].setText(f"{p.current_a:.3f} A")
-        self.stat["VOLTAGE"].setText(f"{p.voltage_v:.3f} V")
-        self.stat["STATUS"].setText(p.status_str)
-        self.notes.setText(p.notes or "—")
-        choice = next((k for k, v in self.ranges.items() if v.isChecked()), "Live")
-        now = datetime.datetime.now().astimezone()
-        cutoff = {
-            "Live": now - datetime.timedelta(minutes=15),
-            "1h": now - datetime.timedelta(hours=1),
-            "6h": now - datetime.timedelta(hours=6),
-            "24h": now - datetime.timedelta(hours=24),
-            "All": datetime.datetime.min,
-        }[choice]
+    def _build_header(self, root):
+        header = panel()
 
-        def f(t, v):
-            return [(x, y) for x, y in zip(t, v) if x >= cutoff]
-
-        a = f(p.time_hist, p.current_hist)
-        t = f(self.chamber.time_hist, self.chamber.temp_hist)
-        self.l1.set_data([x for x, y in a], [y for x, y in a])
-        self.l2.set_data([x for x, y in t], [y for x, y in t])
-        for ax in (self.a1, self.a2):
-            ax.relim()
-            ax.autoscale_view()
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-        self.on_range.setText(
-            f"ON-TIME IN RANGE: {sum(1 for x, y in a if y > 0) * 0.001:.2f} h"
+        layout = QHBoxLayout(header)
+        layout.setContentsMargins(
+            12,
+            8,
+            12,
+            8,
         )
+        layout.setSpacing(8)
+
+        layout.addWidget(
+            label(
+                f"◈ PSU{self.psu.idx + 1} · {self.psu.etr_number}",
+                FML,
+                self.accent,
+            )
+        )
+
+        layout.addWidget(
+            label(
+                f"TECH: {self.psu.technician}",
+                FM,
+                C["dim"],
+            )
+        )
+
+        layout.addStretch()
+
+        layout.addWidget(
+            label(
+                "RANGE:",
+                FMS,
+                C["dim"],
+            )
+        )
+
+        self.group = QButtonGroup(self)
+        self.group.setExclusive(True)
+
+        self.ranges = {}
+
+        for option in (
+            "Live",
+            "1h",
+            "6h",
+            "24h",
+            "All",
+        ):
+            button = QRadioButton(option)
+
+            self.group.addButton(button)
+            self.ranges[option] = button
+
+            layout.addWidget(button)
+
+        root.addWidget(header)
+
+    def _build_statistics(self, root):
+        statistics_panel = panel()
+
+        layout = QGridLayout(statistics_panel)
+        layout.setContentsMargins(
+            12,
+            8,
+            12,
+            8,
+        )
+        layout.setHorizontalSpacing(12)
+        layout.setVerticalSpacing(6)
+
+        self.stat = {}
+
+        statistics = [
+            (
+                "HOURS ON",
+                f"{self.psu.hours_elapsed:.2f} h",
+                self.accent,
+            ),
+            (
+                "TARGET",
+                f"{self.psu.target_hrs} h",
+                C["yellow"],
+            ),
+            (
+                "PROGRESS",
+                f"{self.psu.progress_pct:.1f}%",
+                self.accent,
+            ),
+            (
+                "CURRENT",
+                f"{self.psu.current_a:.3f} A",
+                self.accent,
+            ),
+            (
+                "VOLTAGE",
+                f"{self.psu.voltage_v:.3f} V",
+                C["text"],
+            ),
+            (
+                "STATUS",
+                self.psu.status_str,
+                self.psu.status_color,
+            ),
+        ]
+
+        for column, (
+            name,
+            value,
+            value_color,
+        ) in enumerate(statistics):
+            heading = label(
+                name,
+                FMS,
+                C["dim"],
+            )
+            heading.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            value_label = label(
+                value,
+                FMB,
+                value_color,
+            )
+            value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            layout.addWidget(
+                heading,
+                0,
+                column,
+            )
+            layout.addWidget(
+                value_label,
+                1,
+                column,
+            )
+
+            self.stat[name] = value_label
+
+        self.on_range = label(
+            "ON-TIME IN RANGE: — h",
+            FM,
+            C["cyan"],
+        )
+
+        layout.addWidget(
+            self.on_range,
+            2,
+            0,
+            1,
+            len(statistics),
+        )
+
+        root.addWidget(statistics_panel)
+
+    def _build_notes(self, root):
+        notes_panel = panel()
+
+        layout = QHBoxLayout(notes_panel)
+        layout.setContentsMargins(
+            12,
+            6,
+            12,
+            6,
+        )
+        layout.setSpacing(8)
+
+        layout.addWidget(
+            label(
+                "NOTES:",
+                FMS,
+                C["dim"],
+            )
+        )
+
+        self.notes = label(
+            self.psu.notes or "—",
+            FMS,
+            C["text"],
+        )
+        self.notes.setWordWrap(True)
+
+        layout.addWidget(self.notes, 1)
+
+        root.addWidget(notes_panel)
+
+    def _build_charts(self, root):
+        self.fig = Figure(
+            figsize=(7, 4),
+            dpi=96,
+            facecolor=PLOT_BG,
+        )
+
+        self.fig.subplots_adjust(
+            left=0.09,
+            right=0.97,
+            top=0.94,
+            bottom=0.11,
+            hspace=0.42,
+        )
+
+        self.a1 = self.fig.add_subplot(211)
+        self.a2 = self.fig.add_subplot(212)
+
+        style_ax(self.a1)
+        style_ax(self.a2)
+
+        self.a1.set_title(
+            f"PSU{self.psu.idx + 1} Current",
+            color=self.accent,
+            fontsize=9,
+            loc="left",
+        )
+        self.a1.set_ylabel(
+            "Current (A)",
+            color=PLOT_TEXT,
+            fontsize=8,
+        )
+
+        self.a2.set_title(
+            "Chamber Temperature",
+            color=C["orange"],
+            fontsize=9,
+            loc="left",
+        )
+        self.a2.set_ylabel(
+            "Temperature (°C)",
+            color=PLOT_TEXT,
+            fontsize=8,
+        )
+
+        (self.l1,) = self.a1.plot(
+            [],
+            [],
+            color=self.accent,
+            linewidth=1.5,
+        )
+
+        (self.l2,) = self.a2.plot(
+            [],
+            [],
+            color=C["orange"],
+            linewidth=1.5,
+        )
+
+        self.canvas = FigureCanvasQTAgg(self.fig)
+
+        root.addWidget(self.canvas, 1)
+
+    def _build_refresh_button(self, root):
+        refresh_button = QPushButton("↻ REFRESH")
+        refresh_button.setStyleSheet(button_style(self.accent))
+        refresh_button.clicked.connect(self.refresh)
+
+        root.addWidget(
+            refresh_button,
+            0,
+            Qt.AlignmentFlag.AlignHCenter,
+        )
+
+    def _on_range_changed(self, checked):
+        """
+        Refresh only when a range button becomes checked.
+
+        Switching radio buttons emits one false signal for the
+        previous button and one true signal for the new button.
+        """
+        if checked:
+            self.refresh()
+
+    @staticmethod
+    def _normalize_datetime(value):
+        """
+        Convert an aware datetime to a naive datetime.
+
+        Current application history uses naive local datetime
+        objects. This also supports aware datetime objects that
+        may remain in memory from an earlier application version.
+        """
+        if not isinstance(
+            value,
+            datetime.datetime,
+        ):
+            return None
+
+        if value.tzinfo is not None:
+            return value.replace(tzinfo=None)
+
+        return value
+
+    def _selected_range(self):
+        for name, button in self.ranges.items():
+            if button.isChecked():
+                return name
+
+        return "Live"
+
+    def _range_cutoff(self):
+        now = datetime.datetime.now()
+        selected_range = self._selected_range()
+
+        cutoff_by_range = {
+            "Live": (now - datetime.timedelta(minutes=15)),
+            "1h": (now - datetime.timedelta(hours=1)),
+            "6h": (now - datetime.timedelta(hours=6)),
+            "24h": (now - datetime.timedelta(hours=24)),
+            "All": datetime.datetime.min,
+        }
+
+        return cutoff_by_range[selected_range]
+
+    def _filter_history(
+        self,
+        times,
+        values,
+        cutoff,
+    ):
+        filtered_points = []
+
+        for timestamp, value in zip(
+            times,
+            values,
+            strict=False,
+        ):
+            normalized_timestamp = self._normalize_datetime(timestamp)
+
+            if normalized_timestamp is None:
+                continue
+
+            if normalized_timestamp >= cutoff:
+                filtered_points.append(
+                    (
+                        normalized_timestamp,
+                        value,
+                    )
+                )
+
+        return filtered_points
+
+    def _get_poll_seconds(self):
+        times = list(self.psu.time_hist)
+
+        if len(times) < 2:
+            return 1.0
+
+        first = self._normalize_datetime(times[-2])
+        second = self._normalize_datetime(times[-1])
+
+        if first is None or second is None:
+            return 1.0
+
+        interval = (second - first).total_seconds()
+
+        if interval <= 0:
+            return 1.0
+
+        return interval
+
+    @staticmethod
+    def _calculate_on_time_hours(
+        current_points,
+        default_interval,
+    ):
+        if not current_points:
+            return 0.0
+
+        on_time_seconds = 0.0
+
+        for index, (
+            timestamp,
+            current,
+        ) in enumerate(current_points):
+            if current <= 0:
+                continue
+
+            if index == 0:
+                interval_seconds = default_interval
+            else:
+                previous_timestamp = current_points[index - 1][0]
+
+                interval_seconds = (timestamp - previous_timestamp).total_seconds()
+
+                if interval_seconds <= 0:
+                    interval_seconds = default_interval
+
+            on_time_seconds += interval_seconds
+
+        return on_time_seconds / 3600
+
+    def _update_statistics(self):
+        psu = self.psu
+
+        self.stat["HOURS ON"].setText(f"{psu.hours_elapsed:.2f} h")
+        self.stat["TARGET"].setText(f"{psu.target_hrs} h")
+        self.stat["PROGRESS"].setText(f"{psu.progress_pct:.1f}%")
+        self.stat["CURRENT"].setText(f"{psu.current_a:.3f} A")
+        self.stat["VOLTAGE"].setText(f"{psu.voltage_v:.3f} V")
+
+        self.stat["STATUS"].setText(psu.status_str)
+        self.stat["STATUS"].setStyleSheet(
+            f"""
+            QLabel {{
+                color: {psu.status_color};
+                background: {C["tile_bg"]};
+                border: 1px solid
+                    {psu.status_color};
+                border-radius: 4px;
+                padding: 3px 7px;
+            }}
+            """
+        )
+
+        self.notes.setText(psu.notes or "—")
+
+    def _update_charts(
+        self,
+        current_points,
+        temperature_points,
+    ):
+        current_times = [timestamp for timestamp, _ in current_points]
+        current_values = [value for _, value in current_points]
+
+        temperature_times = [timestamp for timestamp, _ in temperature_points]
+        temperature_values = [value for _, value in temperature_points]
+
+        self.l1.set_data(
+            current_times,
+            current_values,
+        )
+        self.l2.set_data(
+            temperature_times,
+            temperature_values,
+        )
+
+        for axis in (self.a1, self.a2):
+            axis.relim()
+            axis.autoscale_view()
+
+            axis.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+
         self.canvas.draw_idle()
+
+    def refresh(self):
+        self._update_statistics()
+
+        cutoff = self._range_cutoff()
+
+        current_points = self._filter_history(
+            self.psu.time_hist,
+            self.psu.current_hist,
+            cutoff,
+        )
+
+        temperature_points = self._filter_history(
+            self.chamber.time_hist,
+            self.chamber.temp_hist,
+            cutoff,
+        )
+
+        self._update_charts(
+            current_points,
+            temperature_points,
+        )
+
+        poll_seconds = self._get_poll_seconds()
+
+        on_time_hours = self._calculate_on_time_hours(
+            current_points,
+            poll_seconds,
+        )
+
+        self.on_range.setText(f"ON-TIME IN RANGE: {on_time_hours:.3f} h")
 
 
 class CompleteTestDialog(QDialog):

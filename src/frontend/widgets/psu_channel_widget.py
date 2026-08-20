@@ -1,26 +1,25 @@
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
-    QLineEdit,
+    QLabel,
     QProgressBar,
-    QPushButton,
     QVBoxLayout,
 )
 
 from src.frontend.ui_styles import (
-    FMB,
-    FMS,
     C,
+    FMB,
+    FML,
+    FMS,
     button_style,
 )
-from src.frontend.widgets.common import (
-    create_label,
-)
+from src.frontend.widgets.common import create_label
 
 
 class PSUChannelWidget(QFrame):
+    # Existing signals remain available.
     test_toggled = Signal(int)
     control_requested = Signal(int)
     trend_requested = Signal(int)
@@ -30,6 +29,9 @@ class PSUChannelWidget(QFrame):
     etr_changed = Signal(int, str)
     technician_changed = Signal(int, str)
     target_changed = Signal(int, str)
+
+    # New signal emitted when the card is clicked.
+    selected = Signal(int)
 
     def __init__(
         self,
@@ -42,229 +44,283 @@ class PSUChannelWidget(QFrame):
 
         self.index = index
         self.accent = accent
+        self.psu = psu
 
-        self.setObjectName("card")
-        self.setMinimumHeight(118)
+        self.setObjectName("machineCard")
+        self.setProperty("state", "idle")
+        self.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.setMinimumHeight(180)
 
+        self._build_ui()
+        self.update_state(psu)
+
+    def _build_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(
-            10,
-            8,
-            10,
-            8,
+            16,
+            14,
+            16,
+            14,
         )
-        main_layout.setSpacing(7)
+        main_layout.setSpacing(12)
 
-        self._build_readback_row(main_layout)
-        self._build_information_row(
-            main_layout,
-            psu,
-        )
-        self._build_control_row(main_layout)
+        # Header
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(8)
 
-    def _build_readback_row(self, parent_layout):
-        layout = QHBoxLayout()
-        layout.setSpacing(8)
-
-        channel_label = create_label(
+        self.channel_label = create_label(
             f"PSU {self.index + 1}",
-            ("Consolas", 12, True),
+            FML,
             self.accent,
         )
-        channel_label.setMinimumWidth(66)
 
         self.status_label = create_label(
             "IDLE",
             FMB,
             C["dim"],
         )
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_label.setMinimumWidth(84)
+        self.status_label.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+        self.status_label.setMinimumWidth(90)
 
-        self.voltage_label = create_label(
-            "0.000 V",
+        header_layout.addWidget(
+            self.channel_label
+        )
+        header_layout.addStretch()
+        header_layout.addWidget(
+            self.status_label
+        )
+
+        main_layout.addLayout(header_layout)
+
+        # ETR and technician
+        information_layout = QHBoxLayout()
+
+        self.etr_label = create_label(
+            self.psu.etr_number or "NO ETR",
             FMB,
             C["text"],
         )
-        self.current_label = create_label(
+
+        self.technician_label = create_label(
+            self.psu.technician or "—",
+            FMS,
+            C["dim"],
+        )
+
+        information_layout.addWidget(
+            self.etr_label
+        )
+        information_layout.addStretch()
+        information_layout.addWidget(
+            self.technician_label
+        )
+
+        main_layout.addLayout(
+            information_layout
+        )
+
+        # Measurement values
+        measurements_layout = QGridLayout()
+        measurements_layout.setHorizontalSpacing(
+            15
+        )
+        measurements_layout.setVerticalSpacing(
+            5
+        )
+
+        measurements_layout.addWidget(
+            self._metric_title("VOLTAGE"),
+            0,
+            0,
+        )
+        measurements_layout.addWidget(
+            self._metric_title("CURRENT"),
+            0,
+            1,
+        )
+        measurements_layout.addWidget(
+            self._metric_title("ELAPSED"),
+            0,
+            2,
+        )
+
+        self.voltage_label = self._metric_value(
+            "0.000 V",
+            C["text"],
+        )
+        self.current_label = self._metric_value(
             "0.000 A",
-            FMB,
             self.accent,
         )
-        self.hours_label = create_label(
+        self.hours_label = self._metric_value(
             "0.00 h",
+            self.accent,
+        )
+
+        measurements_layout.addWidget(
+            self.voltage_label,
+            1,
+            0,
+        )
+        measurements_layout.addWidget(
+            self.current_label,
+            1,
+            1,
+        )
+        measurements_layout.addWidget(
+            self.hours_label,
+            1,
+            2,
+        )
+
+        for column in range(3):
+            measurements_layout.setColumnStretch(
+                column,
+                1,
+            )
+
+        main_layout.addLayout(
+            measurements_layout
+        )
+
+        # Progress
+        progress_header = QHBoxLayout()
+
+        progress_header.addWidget(
+            create_label(
+                "TEST PROGRESS",
+                FMS,
+                C["dim"],
+            )
+        )
+        progress_header.addStretch()
+
+        self.progress_text = create_label(
+            "0.0%",
             FMB,
             self.accent,
         )
 
-        layout.addWidget(channel_label)
-        layout.addWidget(self.status_label)
-        layout.addStretch()
-
-        layout.addWidget(
-            create_label(
-                "VOLTAGE",
-                FMS,
-                C["dim"],
-            )
+        progress_header.addWidget(
+            self.progress_text
         )
-        layout.addWidget(self.voltage_label)
-        layout.addSpacing(8)
 
-        layout.addWidget(
-            create_label(
-                "CURRENT",
-                FMS,
-                C["dim"],
-            )
-        )
-        layout.addWidget(self.current_label)
-        layout.addSpacing(8)
-
-        layout.addWidget(
-            create_label(
-                "ELAPSED",
-                FMS,
-                C["dim"],
-            )
-        )
-        layout.addWidget(self.hours_label)
-
-        parent_layout.addLayout(layout)
-
-    def _build_information_row(
-        self,
-        parent_layout,
-        psu,
-    ):
-        layout = QGridLayout()
-        layout.setHorizontalSpacing(8)
-        layout.setVerticalSpacing(4)
-
-        self.etr_input = QLineEdit(psu.etr_number)
-        self.etr_input.setPlaceholderText("ETR number")
-
-        self.technician_input = QLineEdit(psu.technician)
-        self.technician_input.setPlaceholderText("Technician")
-
-        self.target_input = QLineEdit(str(psu.target_hrs))
-        self.target_input.setMaximumWidth(76)
-        self.target_input.setAlignment(Qt.AlignmentFlag.AlignRight)
+        main_layout.addLayout(progress_header)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 1000)
         self.progress_bar.setValue(0)
-        self.progress_bar.setFormat("0.0%")
-        self.progress_bar.setMinimumWidth(130)
-        self.progress_bar.setMinimumHeight(18)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setMinimumHeight(12)
 
-        headers = (
-            ("ETR NUMBER", 0),
-            ("TECHNICIAN", 1),
-            ("TARGET", 2),
-            ("PROGRESS", 3),
+        main_layout.addWidget(
+            self.progress_bar
         )
 
-        for text, column in headers:
-            layout.addWidget(
-                create_label(
-                    text,
-                    FMS,
-                    C["dim"],
-                ),
-                0,
-                column,
-            )
-
-        layout.addWidget(
-            self.etr_input,
-            1,
-            0,
+        # Click hint
+        self.click_hint = create_label(
+            "CLICK TO OPEN MACHINE DETAILS",
+            FMS,
+            C["dim"],
         )
-        layout.addWidget(
-            self.technician_input,
-            1,
-            1,
-        )
-        layout.addWidget(
-            self.target_input,
-            1,
-            2,
-        )
-        layout.addWidget(
-            self.progress_bar,
-            1,
-            3,
+        self.click_hint.setAlignment(
+            Qt.AlignmentFlag.AlignRight
         )
 
-        layout.setColumnStretch(0, 2)
-        layout.setColumnStretch(1, 2)
-        layout.setColumnStretch(2, 1)
-        layout.setColumnStretch(3, 3)
+        main_layout.addWidget(self.click_hint)
 
-        self.etr_input.editingFinished.connect(
-            lambda: self.etr_changed.emit(
-                self.index,
-                self.etr_input.text().strip(),
-            )
+    def _metric_title(self, text):
+        result = create_label(
+            text,
+            FMS,
+            C["dim"],
         )
-        self.technician_input.editingFinished.connect(
-            lambda: self.technician_changed.emit(
-                self.index,
-                self.technician_input.text().strip(),
-            )
+        result.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
         )
-        self.target_input.editingFinished.connect(
-            lambda: self.target_changed.emit(
-                self.index,
-                self.target_input.text().strip(),
-            )
+        return result
+
+    def _metric_value(
+        self,
+        text,
+        color,
+    ):
+        result = create_label(
+            text,
+            FMB,
+            color,
         )
-
-        parent_layout.addLayout(layout)
-
-    def _build_control_row(self, parent_layout):
-        layout = QHBoxLayout()
-        layout.setSpacing(6)
-
-        self.start_button = QPushButton("START")
-        self.start_button.setMinimumWidth(90)
-        self.start_button.setStyleSheet(button_style(C["green"], True))
-
-        control_button = QPushButton("CONTROL")
-        control_button.setStyleSheet(button_style(self.accent))
-
-        trend_button = QPushButton("TREND")
-        trend_button.setStyleSheet(button_style(self.accent))
-
-        complete_button = QPushButton("COMPLETE")
-        complete_button.setStyleSheet(button_style(C["green"]))
-
-        notes_button = QPushButton("NOTES")
-
-        self.start_button.clicked.connect(lambda: self.test_toggled.emit(self.index))
-        control_button.clicked.connect(lambda: self.control_requested.emit(self.index))
-        trend_button.clicked.connect(lambda: self.trend_requested.emit(self.index))
-        complete_button.clicked.connect(
-            lambda: self.complete_requested.emit(self.index)
+        result.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
         )
-        notes_button.clicked.connect(lambda: self.notes_requested.emit(self.index))
+        return result
 
-        layout.addWidget(self.start_button)
-        layout.addWidget(control_button)
-        layout.addWidget(trend_button)
-        layout.addWidget(complete_button)
-        layout.addWidget(notes_button)
-        layout.addStretch()
+    def mousePressEvent(self, event):
+        if (
+            event.button()
+            == Qt.MouseButton.LeftButton
+        ):
+            self.selected.emit(self.index)
 
-        parent_layout.addLayout(layout)
+        super().mousePressEvent(event)
+
+    def enterEvent(self, event):
+        self.setProperty("hovered", True)
+        self._refresh_style()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.setProperty("hovered", False)
+        self._refresh_style()
+        super().leaveEvent(event)
+
+    def _refresh_style(self):
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self.update()
+
+    def _state_name(self, psu):
+        if psu.fault:
+            return "fault"
+
+        if not psu.online:
+            return "offline"
+
+        if psu.test_active and psu.power_on:
+            return "running"
+
+        if psu.hours_elapsed > 0:
+            return "paused"
+
+        return "idle"
 
     def update_state(self, psu):
-        self.hours_label.setText(f"{psu.hours_elapsed:.2f} h")
-        self.voltage_label.setText(f"{psu.voltage_v:.3f} V")
-        self.current_label.setText(f"{psu.current_a:.3f} A")
+        self.psu = psu
 
-        self.status_label.setText(psu.status_str)
+        self.etr_label.setText(
+            psu.etr_number or "NO ETR"
+        )
+        self.technician_label.setText(
+            psu.technician or "—"
+        )
+
+        self.voltage_label.setText(
+            f"{psu.voltage_v:.3f} V"
+        )
+        self.current_label.setText(
+            f"{psu.current_a:.3f} A"
+        )
+        self.hours_label.setText(
+            f"{psu.hours_elapsed:.2f} h"
+        )
+
+        self.status_label.setText(
+            psu.status_str
+        )
         self.status_label.setStyleSheet(
             f"""
             QLabel {{
@@ -272,8 +328,8 @@ class PSUChannelWidget(QFrame):
                 background: {C["tile_bg"]};
                 border: 1px solid
                     {psu.status_color};
-                border-radius: 4px;
-                padding: 3px 7px;
+                border-radius: 5px;
+                padding: 4px 10px;
             }}
             """
         )
@@ -286,44 +342,44 @@ class PSUChannelWidget(QFrame):
             ),
         )
 
-        self.progress_bar.setValue(round(progress * 10))
-        self.progress_bar.setFormat(f"{progress:.1f}%")
+        self.progress_text.setText(
+            f"{progress:.1f}%"
+        )
+        self.progress_bar.setValue(
+            round(progress * 10)
+        )
         self.progress_bar.setStyleSheet(
             f"""
             QProgressBar {{
                 background: {C["tile_bg"]};
-                color: {C["text"]};
                 border: 1px solid
                     {C["border2"]};
-                border-radius: 4px;
-                text-align: center;
+                border-radius: 5px;
             }}
 
             QProgressBar::chunk {{
                 background: {self.accent};
-                border-radius: 3px;
+                border-radius: 4px;
             }}
             """
         )
 
-        if psu.test_active:
-            self.start_button.setText("STOP")
-            self.start_button.setStyleSheet(button_style(C["red"], True))
+        state = self._state_name(psu)
 
-        elif psu.hours_elapsed > 0:
-            self.start_button.setText("RESUME")
-            self.start_button.setStyleSheet(button_style(C["yellow"], True))
-
-        else:
-            self.start_button.setText("START")
-            self.start_button.setStyleSheet(button_style(C["green"], True))
+        if self.property("state") != state:
+            self.setProperty("state", state)
+            self._refresh_style()
 
     def reset_test(
         self,
         etr_number,
         technician,
     ):
-        self.etr_input.setText(etr_number)
-        self.technician_input.setText(technician)
+        self.etr_label.setText(
+            etr_number
+        )
+        self.technician_label.setText(
+            technician
+        )
         self.progress_bar.setValue(0)
-        self.progress_bar.setFormat("0.0%")
+        self.progress_text.setText("0.0%")

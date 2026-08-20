@@ -1,3 +1,4 @@
+from datetime import timedelta
 import pyqtgraph as pg
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -48,7 +49,7 @@ class ChamberWidget(QWidget):
 
         title_layout.addWidget(
             create_label(
-                "◈ ENVIRONMENTAL CHAMBER",
+                "ENVIRONMENTAL CHAMBER",
                 FML,
                 C["orange"],
             )
@@ -110,7 +111,7 @@ class ChamberWidget(QWidget):
 
         chart_layout.addWidget(
             create_label(
-                "◈ CHAMBER TEMPERATURE TREND",
+                "CHAMBER TEMPERATURE TREND",
                 FML,
                 C["orange"],
             )
@@ -183,14 +184,27 @@ class ChamberWidget(QWidget):
             self.status_label.setText("● OFFLINE")
             self.status_label.setStyleSheet(f"color: {C['red']};")
 
+            return
+
+
         if len(chamber.time_hist) < 2:
             return
 
-        recent_times = list(chamber.time_hist)[-max_points:]
+        end_time = chamber.time_hist[-1]
+        start_time = end_time - timedelta(minutes=1)
 
-        temperatures = list(chamber.temp_hist)[-max_points:]
+        filtered = [
+            (t, temp)
+            for t, temp in zip(chamber.time_hist, chamber.temp_hist)
+            if t >= start_time
+        ]
 
-        timestamps = [value.timestamp() for value in recent_times]
+        if not filtered:
+            return
+
+        recent_times, temperatures = zip(*filtered)
+
+        timestamps = [t.timestamp() for t in recent_times]
 
         self.line.setData(
             timestamps,
@@ -198,7 +212,7 @@ class ChamberWidget(QWidget):
         )
 
         self.plot.setXRange(
-            timestamps[0],
-            timestamps[-1],
-            padding=0.02,
+            start_time.timestamp(),
+            end_time.timestamp(),
+            padding=0,
         )

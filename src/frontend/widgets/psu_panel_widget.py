@@ -1,16 +1,16 @@
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
+    QGridLayout,
     QHBoxLayout,
-    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
 
 from src.frontend.ui_styles import (
     ACCENTS,
+    C,
     FML,
     FMS,
-    C,
 )
 from src.frontend.widgets.common import (
     create_label,
@@ -22,6 +22,7 @@ from src.frontend.widgets.psu_channel_widget import (
 
 
 class PSUPanelWidget(QWidget):
+    # Existing signals retained for compatibility.
     test_toggled = Signal(int)
     control_requested = Signal(int)
     trend_requested = Signal(int)
@@ -32,6 +33,9 @@ class PSUPanelWidget(QWidget):
     technician_changed = Signal(int, str)
     target_changed = Signal(int, str)
 
+    # New card-click signal.
+    machine_selected = Signal(int)
+
     def __init__(
         self,
         psus,
@@ -41,12 +45,20 @@ class PSUPanelWidget(QWidget):
 
         self.channel_widgets = []
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 4, 0)
-        layout.setSpacing(6)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(
+            0,
+            0,
+            4,
+            0,
+        )
+        root_layout.setSpacing(6)
 
         section_header = create_panel()
-        header_layout = QHBoxLayout(section_header)
+
+        header_layout = QHBoxLayout(
+            section_header
+        )
         header_layout.setContentsMargins(
             12,
             7,
@@ -56,7 +68,9 @@ class PSUPanelWidget(QWidget):
 
         header_layout.addWidget(
             create_label(
-                f"◈ POWER SUPPLY UNITS  ·  {len(psus)}-CHANNEL MONITOR AND CONTROL",
+                f"◈ POWER SUPPLY UNITS"
+                f"  ·  {len(psus)}-CHANNEL "
+                "MONITOR",
                 FML,
                 C["cyan"],
             )
@@ -69,62 +83,113 @@ class PSUPanelWidget(QWidget):
             C["dim"],
         )
 
-        header_layout.addWidget(self.summary_label)
-        layout.addWidget(section_header)
+        header_layout.addWidget(
+            self.summary_label
+        )
 
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        root_layout.addWidget(section_header)
 
-        rows_widget = QWidget()
-        rows_layout = QVBoxLayout(rows_widget)
-        rows_layout.setContentsMargins(0, 0, 2, 0)
-        rows_layout.setSpacing(6)
+        self.card_grid = QGridLayout()
+        self.card_grid.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        self.card_grid.setHorizontalSpacing(8)
+        self.card_grid.setVerticalSpacing(8)
 
         for index, psu in enumerate(psus):
-            widget = PSUChannelWidget(
+            card = PSUChannelWidget(
                 index,
                 psu,
-                ACCENTS[index % len(ACCENTS)],
+                ACCENTS[
+                    index % len(ACCENTS)
+                ],
             )
 
-            self._connect_channel(widget)
+            card.selected.connect(
+                self.machine_selected.emit
+            )
 
-            self.channel_widgets.append(widget)
-            rows_layout.addWidget(widget)
+            # Keep existing signal forwarding.
+            card.test_toggled.connect(
+                self.test_toggled.emit
+            )
+            card.control_requested.connect(
+                self.control_requested.emit
+            )
+            card.trend_requested.connect(
+                self.trend_requested.emit
+            )
+            card.complete_requested.connect(
+                self.complete_requested.emit
+            )
+            card.notes_requested.connect(
+                self.notes_requested.emit
+            )
+            card.etr_changed.connect(
+                self.etr_changed.emit
+            )
+            card.technician_changed.connect(
+                self.technician_changed.emit
+            )
+            card.target_changed.connect(
+                self.target_changed.emit
+            )
 
-        rows_layout.addStretch()
+            row = index // 2
+            column = index % 2
 
-        scroll_area.setWidget(rows_widget)
-        layout.addWidget(scroll_area, 1)
+            self.card_grid.addWidget(
+                card,
+                row,
+                column,
+            )
 
-    def _connect_channel(self, widget):
-        widget.test_toggled.connect(self.test_toggled.emit)
-        widget.control_requested.connect(self.control_requested.emit)
-        widget.trend_requested.connect(self.trend_requested.emit)
-        widget.complete_requested.connect(self.complete_requested.emit)
-        widget.notes_requested.connect(self.notes_requested.emit)
-        widget.etr_changed.connect(self.etr_changed.emit)
-        widget.technician_changed.connect(self.technician_changed.emit)
-        widget.target_changed.connect(self.target_changed.emit)
+            self.channel_widgets.append(card)
+
+        row_count = (
+            len(psus) + 1
+        ) // 2
+
+        for row in range(row_count):
+            self.card_grid.setRowStretch(
+                row,
+                1,
+            )
+
+        self.card_grid.setColumnStretch(0, 1)
+        self.card_grid.setColumnStretch(1, 1)
+
+        root_layout.addLayout(
+            self.card_grid,
+            1,
+        )
 
     def update_channels(self, psus):
         active_count = 0
         fault_count = 0
 
-        for widget, psu in zip(
+        for card, psu in zip(
             self.channel_widgets,
             psus,
+            strict=False,
         ):
-            widget.update_state(psu)
+            card.update_state(psu)
 
             active_count += int(psu.power_on)
             fault_count += int(psu.fault)
 
-        suffix = "" if fault_count == 1 else "S"
+        suffix = (
+            ""
+            if fault_count == 1
+            else "S"
+        )
 
         self.summary_label.setText(
-            f"{active_count} ACTIVE  ·  {fault_count} FAULT{suffix}"
+            f"{active_count} ACTIVE  ·  "
+            f"{fault_count} FAULT{suffix}"
         )
 
         return active_count, fault_count
@@ -135,7 +200,9 @@ class PSUPanelWidget(QWidget):
         etr_number,
         technician,
     ):
-        self.channel_widgets[index].reset_test(
+        self.channel_widgets[
+            index
+        ].reset_test(
             etr_number,
             technician,
         )

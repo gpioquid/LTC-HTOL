@@ -4,11 +4,12 @@ import threading
 from pathlib import Path
 
 from dotenv import load_dotenv
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QInputDialog,
     QMainWindow,
     QMessageBox,
+    QSizePolicy,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -65,6 +66,8 @@ class HTOLMonitor(QMainWindow):
         self.resize(1680, 960)
         self.setMinimumSize(1180, 720)
         self.setObjectName("HTOLMonitor")
+        self._main_splitter_sizes = [1000, 650]
+        self._right_splitter_sizes = [560, 240]
 
         self.psus = [PSUState(index) for index in range(NUM_PSU)]
         self.chamber = ChamberState()
@@ -111,6 +114,138 @@ class HTOLMonitor(QMainWindow):
             self._restore_message = None
 
     def _build_ui(self):
+        central_widget = QWidget()
+        central_widget.setObjectName("centralWidget")
+
+        self.setCentralWidget(central_widget)
+
+        root_layout = QVBoxLayout(central_widget)
+        root_layout.setContentsMargins(8, 8, 8, 5)
+        root_layout.setSpacing(6)
+
+        # ----------------------------------------------------------
+        # Header
+        # ----------------------------------------------------------
+
+        self.header_widget = HeaderWidget(NUM_PSU)
+        self.header_widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+
+        root_layout.addWidget(self.header_widget)
+
+        # ----------------------------------------------------------
+        # Main horizontal splitter
+        # ----------------------------------------------------------
+
+        self.main_splitter = QSplitter(
+            Qt.Orientation.Horizontal,
+            self,
+        )
+        self.main_splitter.setObjectName(
+            "mainSplitter"
+        )
+        self.main_splitter.setChildrenCollapsible(
+            False
+        )
+        self.main_splitter.setHandleWidth(5)
+        self.main_splitter.setOpaqueResize(True)
+
+        # ----------------------------------------------------------
+        # Left side: PSU channels
+        # ----------------------------------------------------------
+
+        self.psu_panel_widget = PSUPanelWidget(
+            self.psus
+        )
+        self.psu_panel_widget.setMinimumWidth(650)
+        self.psu_panel_widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
+
+        self.main_splitter.addWidget(
+            self.psu_panel_widget
+        )
+
+        # ----------------------------------------------------------
+        # Right side: vertical splitter
+        # ----------------------------------------------------------
+
+        self.right_splitter = QSplitter(
+            Qt.Orientation.Vertical,
+            self,
+        )
+        self.right_splitter.setObjectName(
+            "rightSplitter"
+        )
+        self.right_splitter.setChildrenCollapsible(
+            False
+        )
+        self.right_splitter.setHandleWidth(5)
+        self.right_splitter.setOpaqueResize(True)
+        self.right_splitter.setMinimumWidth(440)
+
+        self.chamber_widget = ChamberWidget()
+        self.chamber_widget.setMinimumHeight(330)
+        self.chamber_widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
+
+        self.event_log_widget = EventLogWidget()
+        self.event_log_widget.setMinimumHeight(150)
+        self.event_log_widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
+
+        self.right_splitter.addWidget(
+            self.chamber_widget
+        )
+        self.right_splitter.addWidget(
+            self.event_log_widget
+        )
+
+        # Give the chamber area more space than the event log.
+        self.right_splitter.setStretchFactor(0, 7)
+        self.right_splitter.setStretchFactor(1, 3)
+        self.right_splitter.setSizes(
+            self._right_splitter_sizes
+        )
+
+        self.main_splitter.addWidget(
+            self.right_splitter
+        )
+
+        # PSU panel receives approximately 60% of the width.
+        self.main_splitter.setStretchFactor(0, 3)
+        self.main_splitter.setStretchFactor(1, 2)
+        self.main_splitter.setSizes(
+            self._main_splitter_sizes
+        )
+
+        root_layout.addWidget(
+            self.main_splitter,
+            1,
+        )
+
+        # ----------------------------------------------------------
+        # Bottom status bar
+        # ----------------------------------------------------------
+
+        self.status_bar_widget = StatusBarWidget(
+            DATA_FILE
+        )
+        self.status_bar_widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+
+        root_layout.addWidget(
+            self.status_bar_widget
+        )
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
@@ -184,6 +319,9 @@ class HTOLMonitor(QMainWindow):
         self.psu_panel_widget.trend_requested.connect(self._open_detail)
         self.psu_panel_widget.complete_requested.connect(self._complete_test)
         self.psu_panel_widget.notes_requested.connect(self._edit_notes)
+        self.psu_panel_widget.machine_selected.connect(
+            self._open_detail
+        )
 
         # PSU input changes
         self.psu_panel_widget.etr_changed.connect(self._set_etr)

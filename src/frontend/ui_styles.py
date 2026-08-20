@@ -258,4 +258,36 @@ def button_style(color, filled=False):
         background: {C["border2"]};
         color: {C["white"]};
     }}
+
+    QFrame#machineCard {{
+    background: {C["card"]};
+    border: 1px solid {C["border"]};
+    border-radius: 10px;
+    }}
+
+    QFrame#machineCard[hovered="true"] {{
+        background: {C["card_hover"]};
+        border-color: {C["cyan"]};
+    }}
+
+    QFrame#machineCard[state="idle"] {{
+        border: 1px solid {C["border2"]};
+    }}
+
+    QFrame#machineCard[state="running"] {{
+        border: 2px solid {C["green"]};
+    }}
+
+    QFrame#machineCard[state="paused"] {{
+        border: 2px solid {C["yellow"]};
+    }}
+
+    QFrame#machineCard[state="offline"] {{
+        border: 1px solid {C["red"]};
+    }}
+
+    QFrame#machineCard[state="fault"] {{
+        background: #211217;
+        border: 2px solid {C["red"]};
+    }}
     """
