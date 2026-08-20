@@ -48,9 +48,7 @@ class PSUChannelWidget(QFrame):
 
         self.setObjectName("machineCard")
         self.setProperty("state", "idle")
-        self.setCursor(
-            Qt.CursorShape.PointingHandCursor
-        )
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setMinimumHeight(180)
 
         self._build_ui()
@@ -58,13 +56,28 @@ class PSUChannelWidget(QFrame):
 
     def _build_ui(self):
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(
-            16,
-            14,
-            16,
-            14,
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(0)
+
+        content_frame = QFrame()
+        content_frame.setObjectName("machineCardContent")
+
+        main_layout.addWidget(content_frame)
+
+        content_layout = QVBoxLayout(content_frame)
+        content_layout.setContentsMargins(
+            20,
+            18,
+            20,
+            18,
         )
-        main_layout.setSpacing(12)
+        content_layout.setSpacing(12)
+
+        # header_layout
+        # information_layout
+        # measurements_layout
+        # progress_layout
+        # footer_layout
 
         # Header
         header_layout = QHBoxLayout()
@@ -81,20 +94,26 @@ class PSUChannelWidget(QFrame):
             FMB,
             C["dim"],
         )
-        self.status_label.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
-        )
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_label.setMinimumWidth(90)
 
-        header_layout.addWidget(
-            self.channel_label
-        )
+        header_layout.addWidget(self.channel_label)
+
         header_layout.addStretch()
-        header_layout.addWidget(
-            self.status_label
+
+        self.status_dot = QLabel("●")
+        self.status_dot.setStyleSheet(
+            f"""
+            color: {self.accent};
+            font-size: 18px;
+            border: none;
+            """
         )
 
-        main_layout.addLayout(header_layout)
+        header_layout.addWidget(self.status_dot)
+        header_layout.addWidget(self.status_label)
+
+        content_layout.addLayout(header_layout)
 
         # ETR and technician
         information_layout = QHBoxLayout()
@@ -111,26 +130,16 @@ class PSUChannelWidget(QFrame):
             C["dim"],
         )
 
-        information_layout.addWidget(
-            self.etr_label
-        )
+        information_layout.addWidget(self.etr_label)
         information_layout.addStretch()
-        information_layout.addWidget(
-            self.technician_label
-        )
+        information_layout.addWidget(self.technician_label)
 
-        main_layout.addLayout(
-            information_layout
-        )
+        content_layout.addLayout(information_layout)
 
         # Measurement values
         measurements_layout = QGridLayout()
-        measurements_layout.setHorizontalSpacing(
-            15
-        )
-        measurements_layout.setVerticalSpacing(
-            5
-        )
+        measurements_layout.setHorizontalSpacing(15)
+        measurements_layout.setVerticalSpacing(5)
 
         measurements_layout.addWidget(
             self._metric_title("VOLTAGE"),
@@ -142,11 +151,7 @@ class PSUChannelWidget(QFrame):
             0,
             1,
         )
-        measurements_layout.addWidget(
-            self._metric_title("ELAPSED"),
-            0,
-            2,
-        )
+        
 
         self.voltage_label = self._metric_value(
             "0.000 V",
@@ -154,12 +159,9 @@ class PSUChannelWidget(QFrame):
         )
         self.current_label = self._metric_value(
             "0.000 A",
-            self.accent,
+            "white",
         )
-        self.hours_label = self._metric_value(
-            "0.00 h",
-            self.accent,
-        )
+        
 
         measurements_layout.addWidget(
             self.voltage_label,
@@ -171,11 +173,7 @@ class PSUChannelWidget(QFrame):
             1,
             1,
         )
-        measurements_layout.addWidget(
-            self.hours_label,
-            1,
-            2,
-        )
+        
 
         for column in range(3):
             measurements_layout.setColumnStretch(
@@ -183,9 +181,7 @@ class PSUChannelWidget(QFrame):
                 1,
             )
 
-        main_layout.addLayout(
-            measurements_layout
-        )
+        content_layout.addLayout(measurements_layout)
 
         # Progress
         progress_header = QHBoxLayout()
@@ -197,19 +193,25 @@ class PSUChannelWidget(QFrame):
                 C["dim"],
             )
         )
-        progress_header.addStretch()
 
         self.progress_text = create_label(
             "0.0%",
             FMB,
             self.accent,
         )
-
-        progress_header.addWidget(
-            self.progress_text
+        self.target_label = create_label(
+            "0 / 1000 h",
+            FMB,
+            C["text"],
         )
 
-        main_layout.addLayout(progress_header)
+        progress_header.addWidget(self.target_label)
+
+        progress_header.addStretch()
+
+        progress_header.addWidget(self.progress_text)
+
+        content_layout.addLayout(progress_header)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 1000)
@@ -217,21 +219,28 @@ class PSUChannelWidget(QFrame):
         self.progress_bar.setTextVisible(False)
         self.progress_bar.setMinimumHeight(12)
 
-        main_layout.addWidget(
-            self.progress_bar
-        )
+        content_layout.addWidget(self.progress_bar)
 
         # Click hint
-        self.click_hint = create_label(
-            "CLICK TO OPEN MACHINE DETAILS",
+        footer_layout = QHBoxLayout()
+
+        self.last_update_label = create_label(
+            "Waiting for data...",
             FMS,
             C["dim"],
         )
-        self.click_hint.setAlignment(
-            Qt.AlignmentFlag.AlignRight
+
+        self.click_hint = create_label(
+            "Details →",
+            FMS,
+            "white",
         )
 
-        main_layout.addWidget(self.click_hint)
+        footer_layout.addWidget(self.last_update_label)
+        footer_layout.addStretch()
+        footer_layout.addWidget(self.click_hint)
+
+        content_layout.addLayout(footer_layout)
 
     def _metric_title(self, text):
         result = create_label(
@@ -239,9 +248,7 @@ class PSUChannelWidget(QFrame):
             FMS,
             C["dim"],
         )
-        result.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
-        )
+        result.setAlignment(Qt.AlignmentFlag.AlignCenter)
         return result
 
     def _metric_value(
@@ -254,16 +261,11 @@ class PSUChannelWidget(QFrame):
             FMB,
             color,
         )
-        result.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
-        )
+        result.setAlignment(Qt.AlignmentFlag.AlignCenter)
         return result
 
     def mousePressEvent(self, event):
-        if (
-            event.button()
-            == Qt.MouseButton.LeftButton
-        ):
+        if event.button() == Qt.MouseButton.LeftButton:
             self.selected.emit(self.index)
 
         super().mousePressEvent(event)
@@ -301,26 +303,30 @@ class PSUChannelWidget(QFrame):
     def update_state(self, psu):
         self.psu = psu
 
-        self.etr_label.setText(
-            psu.etr_number or "NO ETR"
-        )
-        self.technician_label.setText(
-            psu.technician or "—"
-        )
-
-        self.voltage_label.setText(
-            f"{psu.voltage_v:.3f} V"
-        )
-        self.current_label.setText(
-            f"{psu.current_a:.3f} A"
-        )
-        self.hours_label.setText(
-            f"{psu.hours_elapsed:.2f} h"
+        target_hours = getattr(
+            psu,
+            "target_hours",
+            1000,
         )
 
-        self.status_label.setText(
-            psu.status_str
+        self.target_label.setText(f"{psu.hours_elapsed:.1f} / {target_hours:.0f} h")
+
+        self.etr_label.setText(psu.etr_number or "NO ETR")
+        self.technician_label.setText(psu.technician or "—")
+
+        self.voltage_label.setText(f"{psu.voltage_v:.3f} V")
+        self.current_label.setText(f"{psu.current_a:.3f} A")
+
+        self.status_label.setText(psu.status_str)
+
+        self.status_dot.setStyleSheet(
+            f"""
+            color: {psu.status_color};
+            font-size: 18px;
+            border: none;
+            """
         )
+
         self.status_label.setStyleSheet(
             f"""
             QLabel {{
@@ -342,12 +348,8 @@ class PSUChannelWidget(QFrame):
             ),
         )
 
-        self.progress_text.setText(
-            f"{progress:.1f}%"
-        )
-        self.progress_bar.setValue(
-            round(progress * 10)
-        )
+        self.progress_text.setText(f"{progress:.1f}%")
+        self.progress_bar.setValue(round(progress * 10))
         self.progress_bar.setStyleSheet(
             f"""
             QProgressBar {{
@@ -375,11 +377,7 @@ class PSUChannelWidget(QFrame):
         etr_number,
         technician,
     ):
-        self.etr_label.setText(
-            etr_number
-        )
-        self.technician_label.setText(
-            technician
-        )
+        self.etr_label.setText(etr_number)
+        self.technician_label.setText(technician)
         self.progress_bar.setValue(0)
         self.progress_text.setText("0.0%")

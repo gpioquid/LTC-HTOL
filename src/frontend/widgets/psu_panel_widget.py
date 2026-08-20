@@ -56,9 +56,7 @@ class PSUPanelWidget(QWidget):
 
         section_header = create_panel()
 
-        header_layout = QHBoxLayout(
-            section_header
-        )
+        header_layout = QHBoxLayout(section_header)
         header_layout.setContentsMargins(
             12,
             7,
@@ -68,9 +66,7 @@ class PSUPanelWidget(QWidget):
 
         header_layout.addWidget(
             create_label(
-                f"◈ POWER SUPPLY UNITS"
-                f"  ·  {len(psus)}-CHANNEL "
-                "MONITOR",
+                f"◈ POWER SUPPLY UNITS  ·  {len(psus)}-CHANNEL MONITOR",
                 FML,
                 C["cyan"],
             )
@@ -83,9 +79,7 @@ class PSUPanelWidget(QWidget):
             C["dim"],
         )
 
-        header_layout.addWidget(
-            self.summary_label
-        )
+        header_layout.addWidget(self.summary_label)
 
         root_layout.addWidget(section_header)
 
@@ -103,40 +97,20 @@ class PSUPanelWidget(QWidget):
             card = PSUChannelWidget(
                 index,
                 psu,
-                ACCENTS[
-                    index % len(ACCENTS)
-                ],
+                ACCENTS[index % len(ACCENTS)],
             )
 
-            card.selected.connect(
-                self.machine_selected.emit
-            )
+            card.selected.connect(self.machine_selected.emit)
 
             # Keep existing signal forwarding.
-            card.test_toggled.connect(
-                self.test_toggled.emit
-            )
-            card.control_requested.connect(
-                self.control_requested.emit
-            )
-            card.trend_requested.connect(
-                self.trend_requested.emit
-            )
-            card.complete_requested.connect(
-                self.complete_requested.emit
-            )
-            card.notes_requested.connect(
-                self.notes_requested.emit
-            )
-            card.etr_changed.connect(
-                self.etr_changed.emit
-            )
-            card.technician_changed.connect(
-                self.technician_changed.emit
-            )
-            card.target_changed.connect(
-                self.target_changed.emit
-            )
+            card.test_toggled.connect(self.test_toggled.emit)
+            card.control_requested.connect(self.control_requested.emit)
+            card.trend_requested.connect(self.trend_requested.emit)
+            card.complete_requested.connect(self.complete_requested.emit)
+            card.notes_requested.connect(self.notes_requested.emit)
+            card.etr_changed.connect(self.etr_changed.emit)
+            card.technician_changed.connect(self.technician_changed.emit)
+            card.target_changed.connect(self.target_changed.emit)
 
             row = index // 2
             column = index % 2
@@ -149,9 +123,7 @@ class PSUPanelWidget(QWidget):
 
             self.channel_widgets.append(card)
 
-        row_count = (
-            len(psus) + 1
-        ) // 2
+        row_count = (len(psus) + 1) // 2
 
         for row in range(row_count):
             self.card_grid.setRowStretch(
@@ -181,15 +153,10 @@ class PSUPanelWidget(QWidget):
             active_count += int(psu.power_on)
             fault_count += int(psu.fault)
 
-        suffix = (
-            ""
-            if fault_count == 1
-            else "S"
-        )
+        suffix = "" if fault_count == 1 else "S"
 
         self.summary_label.setText(
-            f"{active_count} ACTIVE  ·  "
-            f"{fault_count} FAULT{suffix}"
+            f"{active_count} ACTIVE  ·  {fault_count} FAULT{suffix}"
         )
 
         return active_count, fault_count
@@ -200,9 +167,7 @@ class PSUPanelWidget(QWidget):
         etr_number,
         technician,
     ):
-        self.channel_widgets[
-            index
-        ].reset_test(
+        self.channel_widgets[index].reset_test(
             etr_number,
             technician,
         )

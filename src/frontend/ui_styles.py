@@ -3,7 +3,7 @@ from PySide6.QtGui import QFont
 C = {
     "bg": "#080b10",
     "panel": "#0f141b",
-    "card": "#141b24",
+    "card": "#202c38",
     "card_hover": "#18222e",
     "border": "#202b38",
     "border2": "#2b3a4a",
@@ -224,6 +224,92 @@ QMessageBox {{
 QInputDialog {{
     background: {C["panel"]};
 }}
+
+QFrame#machineCard {{
+    background: {C["card"]};
+    border: 1px solid {C["border"]};
+    border-radius: 10px;
+    }}
+
+    QFrame#machineCard[hovered="true"] {{
+        background: {C["card_hover"]};
+        border-color: {C["cyan"]};
+    }}
+
+    QFrame#machineCard[state="idle"] {{
+        border: 1px solid {C["border2"]};
+    }}
+
+    QFrame#machineCard[state="running"] {{
+        border: 2px solid {C["green"]};
+    }}
+
+    QFrame#machineCard[state="paused"] {{
+        border: 2px solid {C["yellow"]};
+    }}
+
+    QFrame#machineCard[state="offline"] {{
+        border: 1px solid {C["red"]};
+    }}
+
+    QFrame#machineCard[state="fault"] {{
+        background: #211217;
+        border: 2px solid {C["red"]};
+    }}
+
+    QFrame#machineCard {{
+        background: #1f242b;
+        border: 1px solid #303844;
+        border-left: 5px solid #4f8cff;
+        border-radius: 14px;
+    }}
+
+    QFrame#machineCard[hovered="true"] {{
+        background: #272f39;
+        border: 1px solid #4f8cff;
+        border-left: 5px solid #4f8cff;
+    }}
+
+    QFrame#machineCard[state="running"] QFrame#machineCardContent {{
+    border: 2px solid #21d07a;
+}}
+
+QFrame#machineCard[state="paused"] QFrame#machineCardContent {{
+    border: 2px solid #f5c451;
+}}
+
+QFrame#machineCard[state="fault"] QFrame#machineCardContent {{
+    border: 2px solid #ff5d6c;
+}}
+
+QFrame#machineCard[state="offline"] QFrame#machineCardContent {{
+    border: 2px solid #708598;
+}}
+    QFrame#metricCard {{
+        background: #161b22;
+        border: 1px solid #303844;
+        border-radius: 8px;
+    }}
+    QFrame#machineCard {{
+    background: #111923;
+    border: 1px solid #263444;
+    border-radius: 18px;
+}}
+
+QFrame#machineCardContent {{
+    background: #141d28;
+    border: 1px solid #314050;
+    border-radius: 14px;
+}}
+QFrame#machineCard[hovered="true"] {{
+    background: #10161d;
+}}
+
+QFrame#machineCard[hovered="true"] QFrame#machineCardContent {{
+    border: 1px solid #35c8ff;
+    background: #1b2734;
+}}
+
 """
 
 
@@ -259,35 +345,5 @@ def button_style(color, filled=False):
         color: {C["white"]};
     }}
 
-    QFrame#machineCard {{
-    background: {C["card"]};
-    border: 1px solid {C["border"]};
-    border-radius: 10px;
-    }}
-
-    QFrame#machineCard[hovered="true"] {{
-        background: {C["card_hover"]};
-        border-color: {C["cyan"]};
-    }}
-
-    QFrame#machineCard[state="idle"] {{
-        border: 1px solid {C["border2"]};
-    }}
-
-    QFrame#machineCard[state="running"] {{
-        border: 2px solid {C["green"]};
-    }}
-
-    QFrame#machineCard[state="paused"] {{
-        border: 2px solid {C["yellow"]};
-    }}
-
-    QFrame#machineCard[state="offline"] {{
-        border: 1px solid {C["red"]};
-    }}
-
-    QFrame#machineCard[state="fault"] {{
-        background: #211217;
-        border: 2px solid {C["red"]};
-    }}
+    
     """

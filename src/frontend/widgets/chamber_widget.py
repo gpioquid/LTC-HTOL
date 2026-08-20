@@ -186,7 +186,6 @@ class ChamberWidget(QWidget):
 
             return
 
-
         if len(chamber.time_hist) < 2:
             return
 
