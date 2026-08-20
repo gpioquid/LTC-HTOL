@@ -22,6 +22,8 @@ from src.frontend.widgets.common import (
 )
 
 
+
+
 class ChamberWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -32,6 +34,22 @@ class ChamberWidget(QWidget):
 
         self._build_status_panel(layout)
         self._build_chart(layout)
+
+    
+    def _make_plot_non_interactive(self, plot_widget) -> None:
+        plot_item = plot_widget.getPlotItem()
+        view_box = plot_item.getViewBox()
+
+        view_box.setMouseEnabled(x=False, y=False)
+        plot_item.setMenuEnabled(False)
+        plot_item.hideButtons()
+
+        plot_widget.viewport().setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents,
+            True,
+        )
+        plot_widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        plot_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
 
     def _build_status_panel(self, layout):
         panel = create_panel()
@@ -124,6 +142,7 @@ class ChamberWidget(QWidget):
                 "bottom": time_axis,
             }
         )
+        self._make_plot_non_interactive(self.plot)
         self.plot.setBackground(PLOT_BG)
         self.plot.showGrid(
             x=True,
