@@ -1,6 +1,7 @@
 import datetime
 import os
 import threading
+import traceback
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -645,6 +646,7 @@ class HTOLMonitor(QMainWindow):
             self.bus.fetched.emit(now)
 
         except Exception as error:
+            traceback.print_exc()
             self.bus.error.emit(f"Polling error: {error}")
 
         finally:

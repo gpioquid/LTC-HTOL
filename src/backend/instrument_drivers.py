@@ -57,7 +57,7 @@ def connect_psus() -> list:
         return _psu_connection
 
 
-def disconnect_psu() -> None:
+def disconnect_psus() -> None:
     """Close all PSU connections and the VISA resource manager"""
 
     global _resource_manager
@@ -68,7 +68,7 @@ def disconnect_psu() -> None:
 
         try:
             #for safety behavior
-            
+
             instrument.close()
             print(f"PSU {idx +1} disconnected")
 
@@ -96,7 +96,7 @@ def psu_read(idx: int) -> dict:
     online = random.random() > 0.04
     on = _sim_power[idx] and online
 
-    instrument = _psu_connection(idx)
+    instrument = _psu_connection[idx]
 
     if instrument is None:
         return{
