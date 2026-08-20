@@ -82,11 +82,15 @@
   "completed_tests": [],
   "event_log": [
     {
-      "ts": "2026-08-20T13:18:12",
+      "ts": "2026-08-20T13:42:11",
       "msg": "Data file: C:\\Users\\gpioquid\\Videos\\LTC\\HTOL\\htol_data.json"
     },
     {
-      "ts": "2026-08-20T13:18:12",
+      "ts": "2026-08-20T13:42:11",
+      "msg": "Polling error: name 'test_instrument' is not defined"
+    },
+    {
+      "ts": "2026-08-20T13:42:16",
       "msg": "Polling error: name 'test_instrument' is not defined"
     }
   ]

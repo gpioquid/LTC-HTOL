@@ -1,5 +1,6 @@
 import os
 import pyvisa
+from typing import Any
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -14,9 +15,9 @@ _resource_manager: pyvisa.ResourceManager | None = None
 _psu_connection: list[Any | None] = [None] * NUM_PSU
 
 
-"""_sim_power = [False] * NUM_PSU
+_sim_power = [False] * NUM_PSU
 _sim_v_set = [12.0, 5.0, 24.0, 15.0, 9.0, 3.3]
-_sim_a_set = [5.0, 3.2, 7.5, 4.8, 6.1, 2.9]"""
+_sim_a_set = [5.0, 3.2, 7.5, 4.8, 6.1, 2.9]
 
 def connect_psus() -> list:
     """Connect to all configured PSUs."""
@@ -53,39 +54,59 @@ def connect_psus() -> list:
             print(f"PSU {psu_number} connection failed at"
                   f"{ip_address}: {exc}")
 
-        return _psu_connections
+        return _psu_connection
 
 def psu_read(idx: int) -> dict:
     """TODO: Replace with Ethernet/SCPI query.  Returns readback values."""
     online = random.random() > 0.04
     on = _sim_power[idx] and online
 
-    voltage = test_instrument.query('MEASure:VOLTage?')
-    current = test_instrument.query('MEASure:CURRent?')
+    instrument = _psu_connection(idx)
 
-    return {
-        "online": online,
-        "power_on": on,
-        "voltage_v": round(voltage[idx] + random.uniform(-0.04, 0.04), 3)
-        if on
-        else 0.0,
-        "current_a": round(current[idx] + random.uniform(-0.10, 0.10), 3)
-        if on
-        else 0.0,
-        "fault": random.random() > 0.98,
-    }
+    if instrument is None:
+        return{
+            "online": False,
+            "power_on": False,
+            "voltage_v": 0.0,
+            "current_a": 0.0,
+            "fault": False,
+        }
 
-"""
+    try:
+        voltage = float(instrument.query('MEASure:VOLTage?').strip())
+        current = float(instrument.query('MEASure:CURRent?').strip())
+
+        output_reponse = instrument.query("OUTPut?").strip().upper()
+        power_on = output_reponse in {"1", "ON"}
+
+        return {
+            "online": True,
+            "power_on": power_on,
+            "voltage_v": round(voltage, 3),
+            "current_a": round(current, 3),
+            "fault": False,
+        }
+    except (pyvisa.Error, ValueError) as exc:
+        print(f"PSU {idx +1} read failed: {exc}")
+
+        return{
+            "online": False,
+            "power_on": False,
+            "voltage_v": 0.0,
+            "current_a": 0.0,
+            "fault": False,
+        }
+
 def psu_set_output(idx: int, voltage: float, current: float):
-    """TODO: Send SCPI  VOLT {voltage}; CURR {current}  to PSU at idx."""
+    #TODO: Send SCPI  VOLT {voltage}; CURR {current}  to PSU at idx.
     _sim_v_set[idx] = voltage
     _sim_a_set[idx] = current
 
 
 def psu_set_power(idx: int, on: bool):
-    """TODO: Send SCPI  OUTPUT ON/OFF  to PSU at idx."""
+    #TODO: Send SCPI  OUTPUT ON/OFF  to PSU at idx.
     _sim_power[idx] = on
-"""
+
 
 def thermocouple_read() -> dict:
     """TODO: Replace with serial read from MCU."""
