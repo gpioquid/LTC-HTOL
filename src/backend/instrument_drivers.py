@@ -1,19 +1,28 @@
 import os
+import threading
 from pathlib import Path
 from typing import Any
 
 import pyvisa
 from dotenv import load_dotenv
 
+
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(PROJECT_DIR / ".env")
-import random
 
 NUM_PSU = int(os.environ["NUM_PSU"])
+PSU_TIMEOUT_MS = int(os.getenv("PSU_TIMEOUT_MS", "10000"))
 
 _resource_manager: pyvisa.ResourceManager | None = None
-_psu_connection: list[Any | None] = [None] * NUM_PSU
 
+# One VISA connection per PSU.
+_psu_connections: list[Any | None] = [None] * NUM_PSU
+
+# Prevent simultaneous polling and control commands on the same PSU.
+_psu_locks = [
+    threading.RLock()
+    for _ in range(NUM_PSU)
+]
 
 
 def connect_psus() -> list:
@@ -89,11 +98,15 @@ def disconnect_psus() -> None:
 
 
 def psu_read(idx: int) -> dict:
+    """Read actual PSU measurements and output state."""
 
-    instrument = _psu_connection[idx]
+    if not 0 <= idx < NUM_PSU:
+        raise IndexError(f"Invalid PSU index: {idx}")
+
+    instrument = _psu_connections[idx]
 
     if instrument is None:
-        return{
+        return {
             "online": False,
             "power_on": False,
             "voltage_v": 0.0,
@@ -101,77 +114,135 @@ def psu_read(idx: int) -> dict:
             "fault": False,
         }
 
-    try:
-        voltage = float(instrument.query('MEASure:VOLTage?').strip())
-        current = float(instrument.query('MEASure:CURRent?').strip())
+    psu_lock = _psu_locks[idx]
 
-        output_reponse = instrument.query("OUTPut?").strip().upper()
-        power_on = output_reponse in {"1", "ON"}
+    try:
+        with psu_lock:
+            voltage_response = instrument.query(
+                "MEASure:VOLTage?"
+            ).strip()
+
+            current_response = instrument.query(
+                "MEASure:CURRent?"
+            ).strip()
+
+            output_response = instrument.query(
+                "OUTPut:STATe?"
+            ).strip().upper()
 
         return {
             "online": True,
-            "power_on": power_on,
-            "voltage_v": round(voltage, 3),
-            "current_a": round(current, 3),
+            "power_on": output_response in {"1", "ON"},
+            "voltage_v": round(
+                float(voltage_response),
+                3,
+            ),
+            "current_a": round(
+                float(current_response),
+                3,
+            ),
             "fault": False,
         }
-    except (pyvisa.Error, ValueError) as exc:
-        print(f"PSU {idx +1} read failed: {exc}")
 
-        return{
+    except (pyvisa.Error, ValueError) as error:
+        print(
+            f"PSU {idx + 1} read failed: {error}"
+        )
+
+        return {
             "online": False,
             "power_on": False,
             "voltage_v": 0.0,
             "current_a": 0.0,
-            "fault": False,
+            "fault": True,
         }
-
-def psu_set_output(idx: int, voltage: float, current: float) -> dict:
-    """Set the voltage and current setpoints for one PSU"""
+def psu_set_output(
+    idx: int,
+    voltage: float,
+    current: float,
+) -> dict:
+    """Apply voltage and current commands to one PSU."""
 
     if not 0 <= idx < NUM_PSU:
-        raise IndexError(f"Invalid PSU Index: {idx}")
-
-    instrument = _psu_connection[idx]
-
-    if instrument is None:
-        raise RuntimeError(f"PSU {idx+1} is not connected")
+        raise IndexError(f"Invalid PSU index: {idx}")
 
     if voltage < 0:
         raise ValueError("Voltage cannot be negative")
 
-    if current <0:
+    if current < 0:
         raise ValueError("Current cannot be negative")
 
-    try:
-        instrument.write("*CLS")
+    instrument = _psu_connections[idx]
 
-        instrument.write("SOURce:VOLTage {voltage:.3f}")
-        instrument.write("SOURce:CURRent {current:.3f}")
-
-        instrument.query("*OPC?")
-        
-        programmed_voltage = float(instrument.query("SOURce:VOLTage?"))
-        programmed_current = float(instrument.query("SOURce:CURRent?"))
-
-        print(
-            f"PSI {idx +1} setpoints applied:"
-            f"{programmed_voltage:.3f} V "
-            f"{programmed_current:.3f} A"
+    if instrument is None:
+        raise RuntimeError(
+            f"PSU {idx + 1} is not connected"
         )
 
-        return{
-            "succes": True,
+    psu_lock = _psu_locks[idx]
+
+    try:
+        with psu_lock:
+            print(
+                f"PSU {idx + 1}: sending current "
+                f"{current:.3f} A"
+            )
+            instrument.write(
+                f"SOURce:CURRent {current:.6f}"
+            )
+
+            print(
+                f"PSU {idx + 1}: sending voltage "
+                f"{voltage:.3f} V"
+            )
+            instrument.write(
+                f"SOURce:VOLTage {voltage:.6f}"
+            )
+
+            print(
+                f"PSU {idx + 1}: querying current setpoint"
+            )
+            current_response = instrument.query(
+                "SOURce:CURRent?"
+            ).strip()
+
+            print(
+                f"PSU {idx + 1}: current response "
+                f"{current_response!r}"
+            )
+
+            print(
+                f"PSU {idx + 1}: querying voltage setpoint"
+            )
+            voltage_response = instrument.query(
+                "SOURce:VOLTage?"
+            ).strip()
+
+            print(
+                f"PSU {idx + 1}: voltage response "
+                f"{voltage_response!r}"
+            )
+
+            programmed_current = float(current_response)
+            programmed_voltage = float(voltage_response)
+
+        return {
+            "success": True,
             "voltage": programmed_voltage,
             "current": programmed_current,
         }
 
-    except (pyvisa.Error, ValueError) as exc:
+    except pyvisa.errors.VisaIOError as error:
         raise RuntimeError(
-            f"Unable to set PSU {idx+1} output: {exc}"
-        ) from exc
+            f"Unable to set PSU {idx + 1} output: "
+            f"{error}"
+        ) from error
 
-
+    except ValueError as error:
+        raise RuntimeError(
+            f"PSU {idx + 1} returned invalid data: "
+            f"{error}"
+        ) from error
 
 def psu_set_power(idx: int, on: bool) -> bool:
     """Enable or disable the output of the selected PSU."""

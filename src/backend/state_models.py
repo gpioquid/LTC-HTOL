@@ -28,6 +28,17 @@ class PSUState:
         self.voltage_v = 0 # readback
         self.current_a = 0 # readback
 
+        #Original required test parameters
+        self.set_voltage = None
+        self.set_current = None
+
+        #Final PSU values determined during calibration
+        self.calibrated_voltage = None
+        self.calibrated_current = None
+
+        self.calibrated_active = False
+        self.calibration_complete = False
+
         
         self.notes = ""
         self.test_start_dt = None
@@ -70,8 +81,27 @@ class PSUState:
         self.target_hrs = saved.get("target_hrs", self.target_hrs)
         self.hours_elapsed = saved.get("hours_elapsed", 0.0)
         self.notes = saved.get("notes", "")
-        self.set_voltage = saved.get("set_voltage", self.set_voltage)
-        self.set_current = saved.get("set_current", self.set_current)
+        saved_set_voltage = saved.get("set_voltage")
+        saved_set_current = saved.get("set_current")
+        saved_cal_voltage = saved.get("calibrated_voltage")
+        saved_cal_current = saved.get("calibrated_current")
+
+        if saved_set_voltage is not None:
+            self.set_voltage = float(saved_set_voltage)
+
+        if saved_set_current is not None:
+            self.set_current = float(saved_set_current)
+
+        if saved_cal_voltage is not None:
+            self.calibrated_voltage = float(saved_cal_voltage)
+
+        if saved_cal_current is not None:
+            self.calibrated_current = float(saved_cal_current)
+
+        self.calibration_complete = saved.get(
+            "calibration_complete",
+            False,
+        )
         self.test_active = saved.get("test_active", False)
         raw_dt = saved.get("test_start_dt")
         if raw_dt:

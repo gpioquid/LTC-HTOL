@@ -27,8 +27,9 @@ from src.backend.state_models import (
 )
 from src.frontend.dialogs import (
     CompleteTestDialog,
-    PSUControlPopup,
+    PSUCalibrationPopup,
     PSUDetailPopup,
+    PSUSetupPopup,
     TestHistoryPopup,
 )
 from src.frontend.widgets import (
@@ -94,6 +95,30 @@ class HTOLMonitor(QMainWindow):
     # ==========================================================
     # Initialization
     # ==========================================================
+
+    def _on_test_started(self, index: int) -> None:
+        psu = self.psus[index]
+
+        psu.calibration_active = False
+        psu.test_active = True
+
+        if psu.test_start_dt is None:
+            psu.test_start_dt = datetime.datetime.now()
+
+        channel = self.psu_panel_widget.channel_widgets[index]
+        channel.update_state(psu)
+
+        self._log(
+            f"TEST STARTED  "
+            f"PSU{index + 1}  "
+            f"ETR:{psu.etr_number}  "
+            f"Tech:{psu.technician}  "
+            f"Target:{psu.target_hrs:g} h  "
+            f"{psu.set_voltage:.3f} V / "
+            f"{psu.set_current:.3f} A"
+        )
+
+        self._auto_save()
 
     def _restore_live_state(self):
         saved_states = self.store.load_live_state()
@@ -581,17 +606,35 @@ class HTOLMonitor(QMainWindow):
 
     def _open_detail(self, index):
         try:
-            dialog = PSUDetailPopup(
-                self,
-                self.psus[index],
-                self.chamber,
-                self._on_detail_settings_applied,
-            )
+            psu = self.psus[index]
+
+            if psu.test_active:
+                dialog = PSUDetailPopup(
+                    self,
+                    psu,
+                    self.chamber,
+                    self._on_detail_settings_applied,
+                )
+            else:
+                dialog = PSUSetupPopup(
+                    self,
+                    psu,
+                    self._open_calibration,
+                )
 
             self._show_dialog(dialog)
 
         except Exception:
             traceback.print_exc()
+
+    def _open_calibration(self, index):
+        dialog = PSUCalibrationPopup(
+            self,
+            self.psus[index],
+            self._on_test_started,
+        )
+
+        self._show_dialog(dialog)
 
     def _open_history(self):
         dialog = TestHistoryPopup(

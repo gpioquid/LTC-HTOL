@@ -61,6 +61,9 @@ class DataStore:
                 else None,
                 "set_voltage": psu.set_voltage,
                 "set_current": psu.set_current,
+                "calibrated_voltage": psu.calibrated_voltage,
+                "calibrated_current": psu.calibrated_current,
+                "calibration_complete": psu.calibration_complete,
                 "test_active": psu.test_active,
                 # Keep a compact snapshot (last 200 pts) for the history plot
                 "current_snap": list(psu.current_hist)[-200:],
