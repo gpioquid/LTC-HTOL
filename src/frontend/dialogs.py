@@ -102,8 +102,8 @@ class PSUDetailPopup(QDialog):
         self.etr_input = QLineEdit(self.psu.etr_number)
         self.technician_input = QLineEdit(self.psu.technician)
         self.target_input = QLineEdit(str(self.psu.target_hrs))
-        self.voltage_input = QLineEdit(f"{self.psu.set_voltage:.3f}")
-        self.current_input = QLineEdit(f"{self.psu.set_current:.3f}")
+        self.voltage_input = QLineEdit()
+        self.current_input = QLineEdit()
 
         layout.addWidget(label("ETR NUMBER:", FMS, C["dim"]), 0, 0)
         layout.addWidget(self.etr_input,0 ,1)

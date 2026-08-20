@@ -8,9 +8,9 @@ from PySide6.QtWidgets import (
 
 from src.frontend.ui_styles import (
     ACCENTS,
-    C,
     FML,
     FMS,
+    C,
 )
 from src.frontend.widgets.common import (
     create_label,

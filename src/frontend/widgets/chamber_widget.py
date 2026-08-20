@@ -1,4 +1,5 @@
 from datetime import timedelta
+
 import pyqtgraph as pg
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -20,8 +21,6 @@ from src.frontend.widgets.common import (
     create_label,
     create_panel,
 )
-
-
 
 
 class ChamberWidget(QWidget):

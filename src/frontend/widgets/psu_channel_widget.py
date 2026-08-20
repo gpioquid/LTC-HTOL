@@ -1,4 +1,4 @@
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -9,11 +9,10 @@ from PySide6.QtWidgets import (
 )
 
 from src.frontend.ui_styles import (
-    C,
     FMB,
     FML,
     FMS,
-    button_style,
+    C,
 )
 from src.frontend.widgets.common import create_label
 

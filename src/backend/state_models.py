@@ -8,8 +8,6 @@ load_dotenv(PROJECT_DIR / ".env")
 import datetime
 from collections import deque
 
-from src.backend.instrument_drivers import _sim_a_set, _sim_v_set
-
 C = {"green": "#00ff88", "yellow": "#ffcc00", "red": "#ff4455", "dim": "#4a6070"}
 MAX_HIST = int(os.environ["MAX_HIST"])
 
@@ -19,18 +17,22 @@ class PSUState:
         self.idx = idx
         self.etr_number = f"ETR-{1000 + idx + 1}"
         self.technician = "—"
+
         self.target_hrs = 1000
         self.hours_elapsed = 0.0
+
         self.online = False
         self.power_on = False
-        self.voltage_v = 0.0  # readback
-        self.current_a = 0.0  # readback
-        self.set_voltage = _sim_v_set[idx]  # setpoint
-        self.set_current = _sim_a_set[idx]  # setpoint
         self.fault = False
+
+        self.voltage_v = 0 # readback
+        self.current_a = 0 # readback
+
+        
         self.notes = ""
         self.test_start_dt = None
-        self.test_active = False  # user explicitly started this test
+        self.test_active = False  
+
         self.current_hist = deque(maxlen=MAX_HIST)
         self.voltage_hist = deque(maxlen=MAX_HIST)
         self.time_hist = deque(maxlen=MAX_HIST)

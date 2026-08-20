@@ -2,9 +2,9 @@ import sys
 
 from PySide6.QtWidgets import QApplication
 
+from src.backend.instrument_drivers import connect_psus, disconnect_psus
 from src.frontend.main_window import HTOLMonitor
 from src.frontend.ui_styles import APP_STYLESHEET
-from src.backend.instrument_drivers import connect_psus, disconnect_psus
 
 
 def main():

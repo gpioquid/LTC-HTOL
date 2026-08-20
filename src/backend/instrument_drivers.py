@@ -1,8 +1,8 @@
 import os
-import pyvisa
-from typing import Any
 from pathlib import Path
+from typing import Any
 
+import pyvisa
 from dotenv import load_dotenv
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
@@ -15,9 +15,6 @@ _resource_manager: pyvisa.ResourceManager | None = None
 _psu_connection: list[Any | None] = [None] * NUM_PSU
 
 
-_sim_power = [False] * NUM_PSU
-_sim_v_set = [12.0, 5.0, 24.0, 15.0, 9.0, 3.3]
-_sim_a_set = [5.0, 3.2, 7.5, 4.8, 6.1, 2.9]
 
 def connect_psus() -> list:
     """Connect to all configured PSUs."""
@@ -92,9 +89,6 @@ def disconnect_psus() -> None:
 
 
 def psu_read(idx: int) -> dict:
-    """TODO: Replace with Ethernet/SCPI query.  Returns readback values."""
-    online = random.random() > 0.04
-    on = _sim_power[idx] and online
 
     instrument = _psu_connection[idx]
 
@@ -132,15 +126,94 @@ def psu_read(idx: int) -> dict:
             "fault": False,
         }
 
-def psu_set_output(idx: int, voltage: float, current: float):
-    #TODO: Send SCPI  VOLT {voltage}; CURR {current}  to PSU at idx.
-    _sim_v_set[idx] = voltage
-    _sim_a_set[idx] = current
+def psu_set_output(idx: int, voltage: float, current: float) -> dict:
+    """Set the voltage and current setpoints for one PSU"""
+
+    if not 0 <= idx < NUM_PSU:
+        raise IndexError(f"Invalid PSU Index: {idx}")
+
+    instrument = _psu_connection[idx]
+
+    if instrument is None:
+        raise RuntimeError(f"PSU {idx+1} is not connected")
+
+    if voltage < 0:
+        raise ValueError("Voltage cannot be negative")
+
+    if current <0:
+        raise ValueError("Current cannot be negative")
+
+    try:
+        instrument.write("*CLS")
+
+        instrument.write("SOURce:VOLTage {voltage:.3f}")
+        instrument.write("SOURce:CURRent {current:.3f}")
+
+        instrument.query("*OPC?")
+        
+        programmed_voltage = float(instrument.query("SOURce:VOLTage?"))
+        programmed_current = float(instrument.query("SOURce:CURRent?"))
+
+        print(
+            f"PSI {idx +1} setpoints applied:"
+            f"{programmed_voltage:.3f} V "
+            f"{programmed_current:.3f} A"
+        )
+
+        return{
+            "succes": True,
+            "voltage": programmed_voltage,
+            "current": programmed_current,
+        }
+
+    except (pyvisa.Error, ValueError) as exc:
+        raise RuntimeError(
+            f"Unable to set PSU {idx+1} output: {exc}"
+        ) from exc
 
 
-def psu_set_power(idx: int, on: bool):
-    #TODO: Send SCPI  OUTPUT ON/OFF  to PSU at idx.
-    _sim_power[idx] = on
+
+def psu_set_power(idx: int, on: bool) -> bool:
+    """Enable or disable the output of the selected PSU."""
+
+    if not 0 <= idx < NUM_PSU:
+        raise IndexError(f"Invalid PSU index: {idx}")
+
+    instrument = _psu_connection[idx]
+
+    if instrument is None:
+        raise RuntimeError(f"PSU {idx +1 } is not connected")
+
+    try:
+        instrument.write("*CLS")
+        instrument.write("OUTP ON" if on else "OUTP OFF")
+        instrument.query("*OPC?")
+
+        response = instrument.query("OUTP?").strip().upper()
+        actual_state = response in {"1", "ON"}
+
+        if actual_state != on:
+            requested = "ON" if on else "OFF"
+            actual = "ON" if actual_state else "OFF"
+
+            raise RuntimeError(
+                f"PSU {idx +1} output verification failed. "
+                f"Requested {requested}, but read back {actual}."
+            )
+
+        print(
+            f"PSU {idx +1} output"
+            f"{'enabled' if actual_state else 'disabled'}"
+        )
+
+        return actual_state
+
+    except pyvisa.Error as exc:
+        raise RuntimeError(
+            f"Unable to control PSU {idx+1} output: {exc}"
+        )
+
+    
 
 
 def thermocouple_read() -> dict:
