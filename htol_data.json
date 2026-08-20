@@ -82,16 +82,392 @@
   "completed_tests": [],
   "event_log": [
     {
-      "ts": "2026-08-20T13:42:11",
+      "ts": "2026-08-20T13:59:14",
       "msg": "Data file: C:\\Users\\gpioquid\\Videos\\LTC\\HTOL\\htol_data.json"
     },
     {
-      "ts": "2026-08-20T13:42:11",
-      "msg": "Polling error: name 'test_instrument' is not defined"
+      "ts": "2026-08-20T13:59:14",
+      "msg": "Polling error: 'list' object is not callable"
     },
     {
-      "ts": "2026-08-20T13:42:16",
-      "msg": "Polling error: name 'test_instrument' is not defined"
+      "ts": "2026-08-20T13:59:19",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T13:59:24",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T13:59:29",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T13:59:34",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T13:59:39",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T13:59:44",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T13:59:49",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T13:59:54",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T13:59:59",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:00:04",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:00:09",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:00:14",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:00:19",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:00:24",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:00:29",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:00:34",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:00:39",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:00:44",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:00:49",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:00:54",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:00:59",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:01:04",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:01:09",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:01:14",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:01:19",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:01:24",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:01:29",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:01:34",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:01:39",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:01:44",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:01:49",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:01:54",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:01:59",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:02:04",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:02:09",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:02:14",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:02:19",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:02:24",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:02:29",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:02:34",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:02:39",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:02:44",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:02:49",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:02:54",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:02:59",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:03:04",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:03:09",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:03:14",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:03:19",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:03:24",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:03:29",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:03:34",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:03:39",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:03:44",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:03:49",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:03:54",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:03:59",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:04:04",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:04:09",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:04:14",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:04:19",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:04:24",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:04:29",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:04:34",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:04:39",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:04:44",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:04:49",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:04:54",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:04:59",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:05:04",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:05:09",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:05:14",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:05:19",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:05:24",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:05:29",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:05:34",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:05:39",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:05:44",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:05:49",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:05:54",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:05:59",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:06:04",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:06:09",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:06:14",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:06:19",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:06:24",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:06:29",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:06:34",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:06:39",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:06:44",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:06:49",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:06:54",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:06:59",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:07:04",
+      "msg": "Polling error: 'list' object is not callable"
+    },
+    {
+      "ts": "2026-08-20T14:07:09",
+      "msg": "Polling error: 'list' object is not callable"
     }
   ]
 }

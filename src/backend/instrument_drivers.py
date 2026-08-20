@@ -44,10 +44,10 @@ def connect_psus() -> list:
             instrument.write_termination = "\n"
 
             identity = instrument.query("*IDN?").strip()
-            _psu_connections[idx] = instrument
+            _psu_connection[idx] = instrument
 
             print(f"PSU {psu_number} connected at"
-                  f"{ip_address}:{identity}")
+                  f" {ip_address} : {identity}")
 
         except pyvisa.Error as exc:
             _psu_connection[idx] = None
@@ -55,6 +55,41 @@ def connect_psus() -> list:
                   f"{ip_address}: {exc}")
 
         return _psu_connection
+
+
+def disconnect_psu() -> None:
+    """Close all PSU connections and the VISA resource manager"""
+
+    global _resource_manager
+
+    for idx, instrument in enumerate(_psu_connection):
+        if instrument is None:
+            continue
+
+        try:
+            #for safety behavior
+            
+            instrument.close()
+            print(f"PSU {idx +1} disconnected")
+
+        except pyvisa.Error as exc:
+            print(f" PSU {idx +1} disconnect error: {exc}")
+
+        finally:
+            _psu_connection[idx] = None
+
+    if _resource_manager is not None:
+        try:
+            _resource_manager.close()
+            print("VISA resource manager closed")
+
+        except pyvisa.Error as exc:
+            print(f"VISA reousce manager close error: {exc}")
+
+        finally:
+            _resource_manager = None
+                                                
+
 
 def psu_read(idx: int) -> dict:
     """TODO: Replace with Ethernet/SCPI query.  Returns readback values."""
