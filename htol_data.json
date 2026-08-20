@@ -3,7 +3,7 @@
     "0": {
       "etr_number": "ETR-1001",
       "technician": "\u2014",
-      "target_hrs": 1000,
+      "target_hrs": 1000.0,
       "hours_elapsed": 0.0,
       "notes": "",
       "test_start_dt": null,
@@ -100,8 +100,32 @@
   "completed_tests": [],
   "event_log": [
     {
-      "ts": "2026-08-20T14:29:02",
+      "ts": "2026-08-20T15:24:49",
       "msg": "Data file: C:\\Users\\gpioquid\\Videos\\LTC\\HTOL\\htol_data.json"
+    },
+    {
+      "ts": "2026-08-20T15:28:02",
+      "msg": "HTOL Monitor v3.0 initialized. Continuous monitoring active."
+    },
+    {
+      "ts": "2026-08-20T15:28:03",
+      "msg": "Data file: C:\\Users\\gpioquid\\Videos\\LTC\\HTOL\\htol_data.json"
+    },
+    {
+      "ts": "2026-08-20T15:28:43",
+      "msg": "Data file: C:\\Users\\gpioquid\\Videos\\LTC\\HTOL\\htol_data.json"
+    },
+    {
+      "ts": "2026-08-20T15:30:11",
+      "msg": "HTOL Monitor v3.0 initialized. Continuous monitoring active."
+    },
+    {
+      "ts": "2026-08-20T15:30:11",
+      "msg": "Data file: C:\\Users\\gpioquid\\Videos\\LTC\\HTOL\\htol_data.json"
+    },
+    {
+      "ts": "2026-08-20T15:30:14",
+      "msg": "PSU1 settings applied: ETR: ETR-1001 Tech: \u2014Target: 1000 h12.000 V and 5.000 A"
     }
   ]
 }

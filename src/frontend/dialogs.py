@@ -61,15 +61,16 @@ def style_ax(ax):
 
 
 class PSUDetailPopup(QDialog):
-    def __init__(self, parent, psu, chamber):
+    def __init__(self, parent, psu, chamber, on_apply):
         super().__init__(parent)
 
         self.psu = psu
         self.chamber = chamber
+        self.on_apply = on_apply
         self.accent = ACCENTS[psu.idx % len(ACCENTS)]
 
-        self.setWindowTitle(f"PSU{psu.idx + 1} · {psu.etr_number} · Detail / History")
-        self.resize(920, 640)
+        self.setWindowTitle(f"PSU{psu.idx + 1} Test Session")
+        self.resize(920, 700)
         self.setMinimumSize(700, 500)
 
         root = QVBoxLayout(self)
@@ -77,20 +78,171 @@ class PSUDetailPopup(QDialog):
         root.setSpacing(6)
 
         self._build_header(root)
+        self._build_settings(root)
         self._build_statistics(root)
         self._build_notes(root)
         self._build_charts(root)
-        self._build_refresh_button(root)
+        self._build_action_buttons(root)
 
         # Connect range buttons only after every UI element exists.
         for button in self.ranges.values():
             button.toggled.connect(self._on_range_changed)
 
         self.ranges["Live"].setChecked(True)
-
-        # Covers the case where the radio button does not emit.
         self.refresh()
 
+    def _build_settings(self, root):
+        settings_panel = panel()
+
+        layout = QGridLayout(settings_panel)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setHorizontalSpacing(10)
+        layout.setVerticalSpacing(8)
+
+        self.etr_input = QLineEdit(self.psu.etr_number)
+        self.technician_input = QLineEdit(self.psu.technician)
+        self.target_input = QLineEdit(str(self.psu.target_hrs))
+        self.voltage_input = QLineEdit(f"{self.psu.set_voltage:.3f}")
+        self.current_input = QLineEdit(f"{self.psu.set_current:.3f}")
+
+        layout.addWidget(label("ETR NUMBER:", FMS, C["dim"]), 0, 0)
+        layout.addWidget(self.etr_input,0 ,1)
+
+        layout.addWidget(label("TECHNICIAN:", FMS, C["dim"]), 0, 2)
+        layout.addWidget(self.technician_input,0 ,3)
+
+        layout.addWidget(label("TARGET HOURS:", FMS, C["dim"]), 1, 0)
+        layout.addWidget(self.target_input,1 ,1)
+
+        layout.addWidget(label("SET VOLTAGE:", FMS, C["dim"]), 1, 2)
+        layout.addWidget(self.voltage_input,1 ,3)
+        layout.addWidget(label("V", FMS, C["dim"]), 1,4)
+
+
+        layout.addWidget(label("SET CURRENT:", FMS, C["dim"]), 2, 2)
+        layout.addWidget(self.current_input,2 ,3)
+        layout.addWidget(label("A", FMS, C["dim"]), 2,4)
+
+
+        self.apply_status = label(
+            "Enter the test configuration, then select APPLY.",
+            FMS, C["dim"],
+        )
+
+        layout.addWidget(self.apply_status, 3, 0, 1, 5)
+
+        root.addWidget(settings_panel)
+
+
+
+    def _build_action_buttons(self, root):
+        layout = QHBoxLayout()
+
+        apply_button = QPushButton("APPLY SETTINGS")
+        apply_button.setStyleSheet(button_style(self.accent))
+        apply_button.clicked.connect(self._apply_settings)
+
+        refresh_button = QPushButton("REFRESH")
+        refresh_button.clicked.connect(self.refresh)
+
+        close_button = QPushButton("CLOSE")
+        close_button.clicked.connect(self.close)
+
+        layout.addStretch()
+        layout.addWidget(apply_button)
+        layout.addWidget(refresh_button)
+        layout.addWidget(close_button)
+        layout.addStretch()
+
+        root.addLayout(layout)
+
+    def _apply_settings(self):
+        etr_number = self.etr_input.text().strip()
+        technician = self.technician_input.text().strip()
+
+        if not etr_number:
+            QMessageBox.warning(
+                self,
+                "Missing ETR Number",
+                "Enter an ETR Number."
+            )
+            return
+
+        if not technician:
+            QMessageBox.warning(
+                self,
+                "Missing Technician",
+                "Enter the technician name."
+            )
+            return
+
+        try:
+            target_hours = float(self.target_input.text())
+            voltage = float(self.voltage_input.text())
+            current = float(self.current_input.text())
+
+            if target_hours <=0:
+                raise ValueError("Target hours must be grater than zero.")
+
+            if voltage <0:
+                raise ValueError("Voltage cannot be negative.")
+
+            if current < 0:
+                raise ValueError("Current cannot be negative.")
+
+        except ValueError as error:
+            QMessageBox.warning(
+                self,
+                "Invalid Settings",
+                str(error),
+            )
+            return
+
+        self.psu.etr_number = etr_number
+        self.psu.technician = technician
+        self.psu.target_hrs = target_hours
+        self.set_voltage = voltage
+        self.set_current = current
+
+        try:
+            psu_set_output(
+                self.psu.idx,
+                voltage,
+                current,
+            )
+
+        except Exception as error:
+            QMessageBox.critical(
+                self,
+                "PSU Communication Error",
+                f"Unable to apply the PSU test configurations: \n{error}",
+            )
+            return
+
+        self.on_apply(
+            self.psu.idx,
+            etr_number,
+            technician,
+            target_hours,
+            voltage,
+            current,
+        )
+
+        self.apply_status.setText(
+            f"Settings applied: {voltage:.3f} V and {current:.3f} A"
+        )
+
+        self.apply_status.setStyleSheet(
+            f"color: {C['green']}; border: 0;"
+        )
+
+        self.setWindowTitle(
+            f"PSU{self.psu.idx + 1}"
+            f"{self.psu.etr_number} Configuration and History"
+        )
+
+        self.refresh()
+    
     def _build_header(self, root):
         header = panel()
 

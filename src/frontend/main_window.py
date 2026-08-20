@@ -525,6 +525,37 @@ class HTOLMonitor(QMainWindow):
 
         self._auto_save()
 
+    def _on_detail_settings_applied(
+            self,
+            index,
+            etr_number,
+            technician,
+            target_hours,
+            voltage,
+            current,
+        ):
+        psu = self.psus[index]
+
+        psu.etr_number = etr_number
+        psu.technician = technician
+        psu.target_hrs = target_hours
+        psu.set_voltage = voltage
+        psu.set_current = current
+
+        channel = self.psu_panel_widget.channel_widgets[index]
+        
+        channel.update_state(psu)
+
+        self._log(
+            f"PSU{index+1} settings applied: "
+            f"ETR: {etr_number} "
+            f"Tech: {technician}"
+            f"Target: {target_hours:g} h"
+            f"{voltage:.3f} V and {current:.3f} A"
+        )
+
+        self._auto_save()
+
     # ==========================================================
     # Dialogs
     # ==========================================================
@@ -549,13 +580,18 @@ class HTOLMonitor(QMainWindow):
         )
 
     def _open_detail(self, index):
-        dialog = PSUDetailPopup(
-            self,
-            self.psus[index],
-            self.chamber,
-        )
+        try:
+            dialog = PSUDetailPopup(
+                self,
+                self.psus[index],
+                self.chamber,
+                self._on_detail_settings_applied,
+            )
 
-        self._show_dialog(dialog)
+            self._show_dialog(dialog)
+
+        except Exception:
+            traceback.print_exc()
 
     def _open_history(self):
         dialog = TestHistoryPopup(
