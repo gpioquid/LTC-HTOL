@@ -10,16 +10,7 @@
       "set_voltage": 12.0,
       "set_current": 5.0,
       "test_active": false,
-      "current_snap": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
+      "current_snap": [],
       "temp_snap": []
     },
     "1": {
@@ -32,16 +23,7 @@
       "set_voltage": 5.0,
       "set_current": 3.2,
       "test_active": false,
-      "current_snap": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
+      "current_snap": [],
       "temp_snap": []
     },
     "2": {
@@ -54,16 +36,7 @@
       "set_voltage": 24.0,
       "set_current": 7.5,
       "test_active": false,
-      "current_snap": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
+      "current_snap": [],
       "temp_snap": []
     },
     "3": {
@@ -76,16 +49,7 @@
       "set_voltage": 15.0,
       "set_current": 4.8,
       "test_active": false,
-      "current_snap": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
+      "current_snap": [],
       "temp_snap": []
     },
     "4": {
@@ -98,16 +62,7 @@
       "set_voltage": 9.0,
       "set_current": 6.1,
       "test_active": false,
-      "current_snap": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
+      "current_snap": [],
       "temp_snap": []
     },
     "5": {
@@ -120,32 +75,19 @@
       "set_voltage": 3.3,
       "set_current": 2.9,
       "test_active": false,
-      "current_snap": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
+      "current_snap": [],
       "temp_snap": []
     }
   },
   "completed_tests": [],
   "event_log": [
     {
-      "ts": "2026-08-20T13:08:35",
+      "ts": "2026-08-20T13:18:12",
       "msg": "Data file: C:\\Users\\gpioquid\\Videos\\LTC\\HTOL\\htol_data.json"
     },
     {
-      "ts": "2026-08-20T13:08:50",
-      "msg": "FAULT detected on PSU2 (ETR-1002)"
-    },
-    {
-      "ts": "2026-08-20T13:09:10",
-      "msg": "FAULT detected on PSU1 (ETR-1001)"
+      "ts": "2026-08-20T13:18:12",
+      "msg": "Polling error: name 'test_instrument' is not defined"
     }
   ]
 }
