@@ -277,20 +277,11 @@ class PSUChannelWidget(QFrame):
             | Qt.AlignmentFlag.AlignVCenter
         )
 
-        self.progress_text = create_label(
-            "0.0%",
-            FMB,
-            self.accent,
-        )
-        self.progress_text.setFixedHeight(15)
-        self.progress_text.setAlignment(
-            Qt.AlignmentFlag.AlignRight
-            | Qt.AlignmentFlag.AlignVCenter
-        )
+        
+        
 
         progress_header.addWidget(progress_title)
         progress_header.addStretch()
-        progress_header.addWidget(self.progress_text)
 
         monitoring_layout.addLayout(progress_header)
 
@@ -512,9 +503,6 @@ class PSUChannelWidget(QFrame):
             ),
         )
 
-        self.progress_text.setText(
-            f"{progress:.1f}%"
-        )
 
         self.progress_bar.setValue(
             round(progress * 10)
@@ -570,4 +558,3 @@ class PSUChannelWidget(QFrame):
         self.etr_label.setText(etr_number)
         self.technician_label.setText(technician)
         self.progress_bar.setValue(0)
-        self.progress_text.setText("0.0%")
