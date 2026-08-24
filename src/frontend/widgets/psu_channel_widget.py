@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
     QVBoxLayout,
+    QSizePolicy,
 )
 
 from src.frontend.ui_styles import (
@@ -53,9 +54,11 @@ class PSUChannelWidget(QFrame):
         self._build_ui()
         self.update_state(psu)
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
+        self.setMinimumHeight(245)
+
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setContentsMargins(5, 5, 5, 5)
         main_layout.setSpacing(0)
 
         content_frame = QFrame()
@@ -64,22 +67,15 @@ class PSUChannelWidget(QFrame):
         main_layout.addWidget(content_frame)
 
         content_layout = QVBoxLayout(content_frame)
-        content_layout.setContentsMargins(
-            20,
-            18,
-            20,
-            18,
-        )
-        content_layout.setSpacing(12)
+        content_layout.setContentsMargins(14, 10, 14, 10)
+        content_layout.setSpacing(5)
 
-        # header_layout
-        # information_layout
-        # measurements_layout
-        # progress_layout
-        # footer_layout
-
+        # ==========================================================
         # Header
+        # ==========================================================
+
         header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(8)
 
         self.channel_label = create_label(
@@ -88,34 +84,43 @@ class PSUChannelWidget(QFrame):
             self.accent,
         )
 
+        self.status_dot = QLabel("●")
+        self.status_dot.setStyleSheet(
+            f"""
+            QLabel {{
+                color: {self.accent};
+                font-size: 18px;
+                border: none;
+                background: transparent;
+            }}
+            """
+        )
+
         self.status_label = create_label(
             "IDLE",
             FMB,
             C["dim"],
         )
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
         self.status_label.setMinimumWidth(90)
+        self.status_label.setFixedHeight(23)
 
         header_layout.addWidget(self.channel_label)
-
         header_layout.addStretch()
-
-        self.status_dot = QLabel("●")
-        self.status_dot.setStyleSheet(
-            f"""
-            color: {self.accent};
-            font-size: 18px;
-            border: none;
-            """
-        )
-
         header_layout.addWidget(self.status_dot)
         header_layout.addWidget(self.status_label)
 
         content_layout.addLayout(header_layout)
 
-        # ETR and technician
+        # ==========================================================
+        # ETR number and technician
+        # ==========================================================
+
         information_layout = QHBoxLayout()
+        information_layout.setContentsMargins(0, 0, 0, 0)
+        information_layout.setSpacing(10)
 
         self.etr_label = create_label(
             self.psu.etr_number or "NO ETR",
@@ -129,29 +134,58 @@ class PSUChannelWidget(QFrame):
             C["dim"],
         )
 
+        self.etr_label.setMinimumHeight(18)
+        self.technician_label.setMinimumHeight(18)
+
         information_layout.addWidget(self.etr_label)
         information_layout.addStretch()
         information_layout.addWidget(self.technician_label)
 
         content_layout.addLayout(information_layout)
 
-        # Measurement values
+        # ==========================================================
+        # Live measurements and progress container
+        # ==========================================================
+
+        monitoring_container = QFrame()
+        monitoring_container.setObjectName("monitoringContainer")
+        monitoring_container.setMinimumHeight(112)
+        monitoring_container.setMaximumHeight(112)
+        monitoring_container.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+
+
+        monitoring_layout = QVBoxLayout(monitoring_container)
+        monitoring_layout.setContentsMargins(12, 6, 12, 7)
+        monitoring_layout.setSpacing(3)
+
+        # ----------------------------------------------------------
+        # Live voltage and current
+        # ----------------------------------------------------------
+
         measurements_layout = QGridLayout()
-        measurements_layout.setHorizontalSpacing(15)
-        measurements_layout.setVerticalSpacing(3)
+        measurements_layout.setContentsMargins(0, 0, 0, 0)
+        measurements_layout.setHorizontalSpacing(30)
+        measurements_layout.setVerticalSpacing(1)
 
-        measurements_layout.addWidget(
-            self._metric_title("VOLTAGE"),
-            1,
-            0,
+        voltage_title = self._metric_title("VOLTAGE")
+        current_title = self._metric_title("CURRENT")
+        voltage_title.setObjectName("monitoringHeading")
+        current_title.setObjectName("monitoringHeading")    
+
+        voltage_title.setAlignment(
+            Qt.AlignmentFlag.AlignHCenter
+            | Qt.AlignmentFlag.AlignVCenter
+        )
+        current_title.setAlignment(
+            Qt.AlignmentFlag.AlignHCenter
+            | Qt.AlignmentFlag.AlignVCenter
         )
 
-        measurements_layout.addWidget(
-            self._metric_title("CURRENT"),
-            1,
-            1,
-        )
-        
+        voltage_title.setFixedHeight(15)
+        current_title.setFixedHeight(15)
 
         self.voltage_label = self._metric_value(
             "0.000 V",
@@ -162,37 +196,85 @@ class PSUChannelWidget(QFrame):
             C["text"],
         )
 
+        self.voltage_label.setAlignment(
+            Qt.AlignmentFlag.AlignHCenter
+            | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.current_label.setAlignment(
+            Qt.AlignmentFlag.AlignHCenter
+            | Qt.AlignmentFlag.AlignVCenter
+        )
+
+        self.voltage_label.setFixedHeight(19)
+        self.current_label.setFixedHeight(19)
 
         measurements_layout.addWidget(
-                    self.voltage_label,
-                    2,
-                    0,
-                )
+            voltage_title,
+            0,
+            0,
+        )
         measurements_layout.addWidget(
-                    self.current_label,
-                    2,
-                    1,
-                )
+            current_title,
+            0,
+            1,
+        )
+        measurements_layout.addWidget(
+            self.voltage_label,
+            1,
+            0,
+        )
+        measurements_layout.addWidget(
+            self.current_label,
+            1,
+            1,
+        )
 
-        
+        measurements_layout.setColumnStretch(0, 1)
+        measurements_layout.setColumnStretch(1, 1)
 
-        for column in range(2):
-            measurements_layout.setColumnStretch(
-                column,
-                1,
-            )
+        monitoring_layout.addLayout(measurements_layout)
 
-        content_layout.addLayout(measurements_layout)
+        # ----------------------------------------------------------
+        # Separator
+        # ----------------------------------------------------------
 
-        # Progress
+        monitoring_separator = QFrame()
+        monitoring_separator.setObjectName(
+            "monitoringSeparator"
+        )
+        monitoring_separator.setFrameShape(
+            QFrame.Shape.HLine
+        )
+        monitoring_separator.setFixedHeight(1)
+        monitoring_separator.setStyleSheet(
+            f"""
+            QFrame#monitoringSeparator {{
+                border: none;
+                background-color: {C["border2"]};
+            }}
+            """
+        )
+
+        monitoring_layout.addWidget(monitoring_separator)
+
+        # ----------------------------------------------------------
+        # Test progress
+        # ----------------------------------------------------------
+
         progress_header = QHBoxLayout()
+        progress_header.setContentsMargins(0, 0, 0, 0)
+        progress_header.setSpacing(8)
 
-        progress_header.addWidget(
-            create_label(
-                "TEST PROGRESS",
-                FMS,
-                C["dim"],
-            )
+        progress_title = create_label(
+            "TEST PROGRESS",
+            FMS,
+            C["dim"],
+        )
+        progress_title.setObjectName("monitoringHeading")
+        progress_title.setFixedHeight(15)
+        progress_title.setAlignment(
+            Qt.AlignmentFlag.AlignLeft
+            | Qt.AlignmentFlag.AlignVCenter
         )
 
         self.progress_text = create_label(
@@ -200,51 +282,51 @@ class PSUChannelWidget(QFrame):
             FMB,
             self.accent,
         )
-        
+        self.progress_text.setFixedHeight(15)
+        self.progress_text.setAlignment(
+            Qt.AlignmentFlag.AlignRight
+            | Qt.AlignmentFlag.AlignVCenter
+        )
 
-
+        progress_header.addWidget(progress_title)
         progress_header.addStretch()
-
         progress_header.addWidget(self.progress_text)
 
-        content_layout.addLayout(progress_header)
+        monitoring_layout.addLayout(progress_header)
 
         self.progress_bar = QProgressBar()
+        self.progress_bar.setObjectName("machineProgressBar")
         self.progress_bar.setRange(0, 1000)
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("0 / 1000 h")
         self.progress_bar.setTextVisible(True)
-        self.progress_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.progress_bar.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+        self.progress_bar.setFixedHeight(21)
 
-        self.progress_bar.setMinimumHeight(24)
+        
+        self.progress_bar.setStyleSheet(
+                f"""
+                QProgressBar#machineProgressBar::chunk {{
+                    background-color: {self.accent};
+                    border-radius: 3px;
+                }}
+                """
+            )
         
 
-        content_layout.addWidget(self.progress_bar)
+        monitoring_layout.addWidget(self.progress_bar)
 
-        # Click hint
-        footer_layout = QHBoxLayout()
+        content_layout.addWidget(monitoring_container)
 
-        self.last_update_label = create_label(
-            "Waiting for data...",
-            FMS,
-            C["dim"],
-        )
+        
+        # ==========================================================
+        # Required test parameters
+        # ==========================================================
 
-        self.click_hint = create_label(
-            "Details →",
-            FMS,
-            "white",
-        )
-
-        footer_layout.addWidget(self.last_update_label)
-        footer_layout.addStretch()
-        footer_layout.addWidget(self.click_hint)
-
-        content_layout.addLayout(footer_layout)
-
-        # Required test parameters at the very bottom
         required_layout = QHBoxLayout()
-        required_layout.setContentsMargins(0, 2, 0, 0)
+        required_layout.setContentsMargins(0, 0, 0, 0)
         required_layout.setSpacing(6)
 
         required_title = create_label(
@@ -272,12 +354,58 @@ class PSUChannelWidget(QFrame):
         )
 
         required_layout.addWidget(required_title)
-        required_layout.addWidget(self.required_voltage_label)
+        required_layout.addWidget(
+            self.required_voltage_label
+        )
         required_layout.addWidget(required_separator)
-        required_layout.addWidget(self.required_current_label)
+        required_layout.addWidget(
+            self.required_current_label
+        )
         required_layout.addStretch()
 
+        required_title.setFixedHeight(16)
+        self.required_voltage_label.setFixedHeight(16)
+        required_separator.setFixedHeight(16)
+        self.required_current_label.setFixedHeight(16)
+
         content_layout.addLayout(required_layout)
+
+
+        # ==========================================================
+        # Footer
+        # ==========================================================
+
+        footer_layout = QHBoxLayout()
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+        footer_layout.setSpacing(8)
+
+        self.last_update_label = create_label(
+            "Waiting for data...",
+            FMS,
+            C["dim"],
+        )
+
+        self.click_hint = create_label(
+            "Details →",
+            FMS,
+            C["text"],
+        )
+        self.click_hint.setAlignment(
+            Qt.AlignmentFlag.AlignRight
+            | Qt.AlignmentFlag.AlignVCenter
+        )
+
+        footer_layout.addWidget(self.last_update_label)
+        footer_layout.addStretch()
+        footer_layout.addWidget(self.click_hint)
+
+        self.last_update_label.setFixedHeight(16)
+        self.click_hint.setFixedHeight(16)
+
+
+
+        content_layout.addLayout(footer_layout)
+
 
     def _metric_title(self, text):
         result = create_label(
@@ -343,8 +471,8 @@ class PSUChannelWidget(QFrame):
         self.etr_label.setText(psu.etr_number or "NO ETR")
         self.technician_label.setText(psu.technician or "—")
 
-        self.voltage_label.setText(f"{psu.voltage_v:.3f} V")
-        self.current_label.setText(f"{psu.current_a:.3f} A")
+        self.voltage_label.setText(f"{psu.voltage_v:.2f} V")
+        self.current_label.setText(f"{psu.current_a:.2f} A")
 
         self.status_label.setText(psu.status_str)
 
@@ -424,14 +552,14 @@ class PSUChannelWidget(QFrame):
             self.required_voltage_label.setText("— V")
         else:
             self.required_voltage_label.setText(
-                f"{psu.set_voltage:.3f} V"
+                f"{psu.set_voltage:.2f} V"
             )
 
         if psu.set_current is None:
             self.required_current_label.setText("— A")
         else:
             self.required_current_label.setText(
-                f"{psu.set_current:.3f} A"
+                f"{psu.set_current:.2f} A"
             )
 
     def reset_test(

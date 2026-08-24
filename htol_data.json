@@ -100,7 +100,15 @@
   "completed_tests": [],
   "event_log": [
     {
-      "ts": "2026-08-24T09:32:21",
+      "ts": "2026-08-24T10:04:10",
+      "msg": "Data file: C:\\Users\\gpioquid\\Videos\\LTC\\HTOL\\htol_data.json"
+    },
+    {
+      "ts": "2026-08-24T10:05:54",
+      "msg": "HTOL Monitor v3.0 initialized. Continuous monitoring active."
+    },
+    {
+      "ts": "2026-08-24T10:05:54",
       "msg": "Resumed active tests: PSU1/342, PSU2/123"
     }
   ]

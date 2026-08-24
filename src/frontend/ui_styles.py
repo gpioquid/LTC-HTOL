@@ -37,6 +37,13 @@ PLOT_BG = C["tile_bg"]
 PLOT_GRID = "#233142"
 PLOT_TEXT = C["dim"]
 
+MONITOR_BG = "#111C27"
+MONITOR_BORDER = "#344B5E"
+MONITOR_HEADING = "#7095AC"
+
+PROGRESS_BG = "#0D161F"
+PROGRESS_TEXT = "#E6F1F8"
+
 
 def font(spec):
     result = QFont(spec[0], spec[1])
@@ -48,6 +55,33 @@ def font(spec):
 
 
 APP_STYLESHEET = f"""
+QFrame#monitoringContainer {{
+    background-color: #111C27;
+    border: 1px solid #344B5E;
+    border-radius: 7px;
+}}
+
+QFrame#monitoringContainer QLabel {{
+    border: none;
+    background-color: transparent;
+}}
+
+QLabel#monitoringHeading {{
+    color: #7095AC;
+    border: none;
+    background-color: transparent;
+}}
+
+QProgressBar#machineProgressBar {{
+    color: #E6F1F8;
+    background-color: #0D161F;
+    border: 1px solid #344B5E;
+    border-radius: 4px;
+    text-align: center;
+    font-size: 10px;
+    padding: 0;
+}}
+
 QWidget {{
     background: {C["bg"]};
     color: {C["text"]};
