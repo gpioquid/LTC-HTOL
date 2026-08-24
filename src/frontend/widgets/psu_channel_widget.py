@@ -138,16 +138,17 @@ class PSUChannelWidget(QFrame):
         # Measurement values
         measurements_layout = QGridLayout()
         measurements_layout.setHorizontalSpacing(15)
-        measurements_layout.setVerticalSpacing(5)
+        measurements_layout.setVerticalSpacing(3)
 
         measurements_layout.addWidget(
             self._metric_title("VOLTAGE"),
-            0,
+            1,
             0,
         )
+
         measurements_layout.addWidget(
             self._metric_title("CURRENT"),
-            0,
+            1,
             1,
         )
         
@@ -158,23 +159,24 @@ class PSUChannelWidget(QFrame):
         )
         self.current_label = self._metric_value(
             "0.000 A",
-            "white",
+            C["text"],
         )
-        
+
 
         measurements_layout.addWidget(
-            self.voltage_label,
-            1,
-            0,
-        )
+                    self.voltage_label,
+                    2,
+                    0,
+                )
         measurements_layout.addWidget(
-            self.current_label,
-            1,
-            1,
-        )
+                    self.current_label,
+                    2,
+                    1,
+                )
+
         
 
-        for column in range(3):
+        for column in range(2):
             measurements_layout.setColumnStretch(
                 column,
                 1,
@@ -240,6 +242,43 @@ class PSUChannelWidget(QFrame):
         footer_layout.addWidget(self.click_hint)
 
         content_layout.addLayout(footer_layout)
+
+        # Required test parameters at the very bottom
+        required_layout = QHBoxLayout()
+        required_layout.setContentsMargins(0, 2, 0, 0)
+        required_layout.setSpacing(6)
+
+        required_title = create_label(
+            "REQUIRED:",
+            FMS,
+            C["dim"],
+        )
+
+        self.required_voltage_label = create_label(
+            "— V",
+            FMS,
+            self.accent,
+        )
+
+        required_separator = create_label(
+            "·",
+            FMS,
+            C["text"],
+        )
+
+        self.required_current_label = create_label(
+            "— A",
+            FMS,
+            self.accent,
+        )
+
+        required_layout.addWidget(required_title)
+        required_layout.addWidget(self.required_voltage_label)
+        required_layout.addWidget(required_separator)
+        required_layout.addWidget(self.required_current_label)
+        required_layout.addStretch()
+
+        content_layout.addLayout(required_layout)
 
     def _metric_title(self, text):
         result = create_label(
@@ -370,6 +409,20 @@ class PSUChannelWidget(QFrame):
         if self.property("state") != state:
             self.setProperty("state", state)
             self._refresh_style()
+
+        if psu.set_voltage is None:
+            self.required_voltage_label.setText("— V")
+        else:
+            self.required_voltage_label.setText(
+                f"{psu.set_voltage:.3f} V"
+            )
+
+        if psu.set_current is None:
+            self.required_current_label.setText("— A")
+        else:
+            self.required_current_label.setText(
+                f"{psu.set_current:.3f} A"
+            )
 
     def reset_test(
         self,

@@ -34,7 +34,6 @@ class ChamberWidget(QWidget):
         self._build_status_panel(layout)
         self._build_chart(layout)
 
-    
     def _make_plot_non_interactive(self, plot_widget) -> None:
         plot_item = plot_widget.getPlotItem()
         view_box = plot_item.getViewBox()

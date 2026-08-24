@@ -19,10 +19,7 @@ _resource_manager: pyvisa.ResourceManager | None = None
 _psu_connections: list[Any | None] = [None] * NUM_PSU
 
 # Prevent simultaneous polling and control commands on the same PSU.
-_psu_locks = [
-    threading.RLock()
-    for _ in range(NUM_PSU)
-]
+_psu_locks = [threading.RLock() for _ in range(NUM_PSU)]
 
 
 def connect_psus() -> list:
@@ -52,13 +49,11 @@ def connect_psus() -> list:
             identity = instrument.query("*IDN?").strip()
             _psu_connections[idx] = instrument
 
-            print(f"PSU {psu_number} connected at"
-                  f" {ip_address} : {identity}")
+            print(f"PSU {psu_number} connected at {ip_address} : {identity}")
 
         except pyvisa.Error as exc:
             _psu_connections[idx] = None
-            print(f"PSU {psu_number} connection failed at"
-                  f"{ip_address}: {exc}")
+            print(f"PSU {psu_number} connection failed at{ip_address}: {exc}")
 
         return _psu_connections
 
@@ -73,13 +68,13 @@ def disconnect_psus() -> None:
             continue
 
         try:
-            #for safety behavior
+            # for safety behavior
 
             instrument.close()
-            print(f"PSU {idx +1} disconnected")
+            print(f"PSU {idx + 1} disconnected")
 
         except pyvisa.Error as exc:
-            print(f" PSU {idx +1} disconnect error: {exc}")
+            print(f" PSU {idx + 1} disconnect error: {exc}")
 
         finally:
             _psu_connections[idx] = None
@@ -94,7 +89,6 @@ def disconnect_psus() -> None:
 
         finally:
             _resource_manager = None
-                                                
 
 
 def psu_read(idx: int) -> dict:
@@ -118,17 +112,11 @@ def psu_read(idx: int) -> dict:
 
     try:
         with psu_lock:
-            voltage_response = instrument.query(
-                "MEASure:VOLTage?"
-            ).strip()
+            voltage_response = instrument.query("MEASure:VOLTage?").strip()
 
-            current_response = instrument.query(
-                "MEASure:CURRent?"
-            ).strip()
+            current_response = instrument.query("MEASure:CURRent?").strip()
 
-            output_response = instrument.query(
-                "OUTPut:STATe?"
-            ).strip().upper()
+            output_response = instrument.query("OUTPut:STATe?").strip().upper()
 
         return {
             "online": True,
@@ -145,9 +133,7 @@ def psu_read(idx: int) -> dict:
         }
 
     except (pyvisa.Error, ValueError) as error:
-        print(
-            f"PSU {idx + 1} read failed: {error}"
-        )
+        print(f"PSU {idx + 1} read failed: {error}")
 
         return {
             "online": False,
@@ -156,7 +142,6 @@ def psu_read(idx: int) -> dict:
             "current_a": 0.0,
             "fault": True,
         }
-
 
 
 def psu_set_output(
@@ -178,34 +163,19 @@ def psu_set_output(
     instrument = _psu_connections[idx]
 
     if instrument is None:
-        raise RuntimeError(
-            f"PSU {idx + 1} is not connected"
-        )
+        raise RuntimeError(f"PSU {idx + 1} is not connected")
 
     psu_lock = _psu_locks[idx]
 
     try:
         with psu_lock:
-            print(
-                f"PSU {idx + 1}: setting current "
-                f"to {current:.3f} A"
-            )
-            instrument.write(
-                f"SOURce:CURRent {current:.6f}"
-            )
+            print(f"PSU {idx + 1}: setting current to {current:.3f} A")
+            instrument.write(f"SOURce:CURRent {current:.6f}")
 
-            print(
-                f"PSU {idx + 1}: setting voltage "
-                f"to {voltage:.3f} V"
-            )
-            instrument.write(
-                f"SOURce:VOLTage {voltage:.6f}"
-            )
+            print(f"PSU {idx + 1}: setting voltage to {voltage:.3f} V")
+            instrument.write(f"SOURce:VOLTage {voltage:.6f}")
 
-        print(
-            f"PSU {idx + 1}: calibration values sent "
-            f"successfully"
-        )
+        print(f"PSU {idx + 1}: calibration values sent successfully")
 
         return {
             "success": True,
@@ -215,10 +185,8 @@ def psu_set_output(
 
     except pyvisa.errors.VisaIOError as error:
         raise RuntimeError(
-            f"Unable to apply calibration values to "
-            f"PSU {idx + 1}: {error}"
+            f"Unable to apply calibration values to PSU {idx + 1}: {error}"
         ) from error
-
 
 
 def psu_set_power(idx: int, on: bool) -> bool:
@@ -230,32 +198,23 @@ def psu_set_power(idx: int, on: bool) -> bool:
     instrument = _psu_connections[idx]
 
     if instrument is None:
-        raise RuntimeError(
-            f"PSU {idx + 1} is not connected"
-        )
+        raise RuntimeError(f"PSU {idx + 1} is not connected")
 
     requested_state = 1 if on else 0
     psu_lock = _psu_locks[idx]
 
     try:
         with psu_lock:
-            instrument.write(
-                f"OUTPut:STATe {requested_state}"
-            )
+            instrument.write(f"OUTPut:STATe {requested_state}")
 
-        print(
-            f"PSU {idx + 1}: output command sent: "
-            f"{'ON' if on else 'OFF'}"
-        )
+        print(f"PSU {idx + 1}: output command sent: {'ON' if on else 'OFF'}")
 
         return on
 
     except pyvisa.errors.VisaIOError as error:
         raise RuntimeError(
-            f"Unable to control PSU {idx + 1} output: "
-            f"{error}"
+            f"Unable to control PSU {idx + 1} output: {error}"
         ) from error
-    
 
 
 def thermocouple_read() -> dict:

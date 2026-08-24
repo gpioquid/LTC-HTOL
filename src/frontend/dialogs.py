@@ -59,6 +59,7 @@ def style_ax(ax):
     ax.tick_params(colors=PLOT_TEXT, labelsize=7)
     ax.grid(True, color=PLOT_GRID, linewidth=0.4, alpha=0.7)
 
+
 class PSUSetupPopup(QDialog):
     def __init__(
         self,
@@ -72,9 +73,7 @@ class PSUSetupPopup(QDialog):
         self.on_continue = on_continue
         self.accent = ACCENTS[psu.idx % len(ACCENTS)]
 
-        self.setWindowTitle(
-            f"PSU{psu.idx + 1} New Test Setup"
-        )
+        self.setWindowTitle(f"PSU{psu.idx + 1} New Test Setup")
         self.resize(550, 430)
         self.setMinimumSize(500, 400)
 
@@ -100,8 +99,7 @@ class PSUSetupPopup(QDialog):
         )
 
         description = label(
-            "Enter the required test parameters before proceeding "
-            "to PSU calibration.",
+            "Enter the required test parameters before proceeding to PSU calibration.",
             FMS,
             C["dim"],
         )
@@ -122,13 +120,9 @@ class PSUSetupPopup(QDialog):
         self.etr_input.setPlaceholderText("Enter ETR number")
 
         self.technician_input = QLineEdit()
-        self.technician_input.setPlaceholderText(
-            "Enter technician name"
-        )
+        self.technician_input.setPlaceholderText("Enter technician name")
 
-        self.target_input = QLineEdit(
-            f"{float(self.psu.target_hrs):g}"
-        )
+        self.target_input = QLineEdit(f"{float(self.psu.target_hrs):g}")
 
         self.required_voltage_input = QLineEdit()
         self.required_voltage_input.setPlaceholderText("Enter Voltage Rating")
@@ -178,15 +172,9 @@ class PSUSetupPopup(QDialog):
     def _build_buttons(self, root):
         layout = QHBoxLayout()
 
-        continue_button = QPushButton(
-            "CONTINUE TO CALIBRATION"
-        )
-        continue_button.setStyleSheet(
-            button_style(self.accent)
-        )
-        continue_button.clicked.connect(
-            self._continue_to_calibration
-        )
+        continue_button = QPushButton("CONTINUE TO CALIBRATION")
+        continue_button.setStyleSheet(button_style(self.accent))
+        continue_button.clicked.connect(self._continue_to_calibration)
 
         cancel_button = QPushButton("CANCEL")
         cancel_button.clicked.connect(self.reject)
@@ -203,12 +191,8 @@ class PSUSetupPopup(QDialog):
             technician = self.technician_input.text().strip()
 
             target_hours = float(self.target_input.text())
-            required_voltage = float(
-                self.required_voltage_input.text()
-            )
-            required_current = float(
-                self.required_current_input.text()
-            )
+            required_voltage = float(self.required_voltage_input.text())
+            required_current = float(self.required_current_input.text())
 
             if not etr_number:
                 raise ValueError("Enter an ETR number.")
@@ -217,19 +201,13 @@ class PSUSetupPopup(QDialog):
                 raise ValueError("Enter the technician name.")
 
             if target_hours <= 0:
-                raise ValueError(
-                    "Target hours must be greater than zero."
-                )
+                raise ValueError("Target hours must be greater than zero.")
 
             if required_voltage < 0:
-                raise ValueError(
-                    "Required voltage cannot be negative."
-                )
+                raise ValueError("Required voltage cannot be negative.")
 
             if required_current < 0:
-                raise ValueError(
-                    "Required current cannot be negative."
-                )
+                raise ValueError("Required current cannot be negative.")
 
         except ValueError as error:
             QMessageBox.warning(
@@ -249,6 +227,7 @@ class PSUSetupPopup(QDialog):
         self.on_continue(self.psu.idx)
         self.accept()
 
+
 class PSUCalibrationPopup(QDialog):
     def __init__(
         self,
@@ -264,9 +243,7 @@ class PSUCalibrationPopup(QDialog):
         self.ui_test_mode = ui_test_mode
         self.accent = ACCENTS[psu.idx % len(ACCENTS)]
 
-        self.setWindowTitle(
-            f"PSU{psu.idx + 1} Calibration"
-        )
+        self.setWindowTitle(f"PSU{psu.idx + 1} Calibration")
         self.resize(620, 520)
         self.setMinimumSize(560, 470)
 
@@ -281,9 +258,7 @@ class PSUCalibrationPopup(QDialog):
         self._build_actions(root)
 
         self.refresh_timer = QTimer(self)
-        self.refresh_timer.timeout.connect(
-            self._refresh_readback
-        )
+        self.refresh_timer.timeout.connect(self._refresh_readback)
         self.refresh_timer.start(500)
 
         self._refresh_readback()
@@ -348,8 +323,7 @@ class PSUCalibrationPopup(QDialog):
         )
         layout.addWidget(
             label(
-                f"{self.psu.set_voltage:.3f} V / "
-                f"{self.psu.set_current:.3f} A",
+                f"{self.psu.set_voltage:.3f} V / {self.psu.set_current:.3f} A",
                 FMB,
                 self.accent,
             ),
@@ -379,13 +353,9 @@ class PSUCalibrationPopup(QDialog):
             else self.psu.set_current
         )
 
-        self.voltage_input = QLineEdit(
-            f"{float(initial_voltage):.3f}"
-        )
+        self.voltage_input = QLineEdit(f"{float(initial_voltage):.3f}")
 
-        self.current_input = QLineEdit(
-            f"{float(initial_current):.3f}"
-        )
+        self.current_input = QLineEdit(f"{float(initial_current):.3f}")
 
         layout.addWidget(
             label("PSU VOLTAGE COMMAND:", FMS, C["dim"]),
@@ -403,15 +373,9 @@ class PSUCalibrationPopup(QDialog):
         layout.addWidget(self.current_input, 1, 1)
         layout.addWidget(label("A"), 1, 2)
 
-        self.apply_button = QPushButton(
-            "APPLY CALIBRATION VALUES"
-        )
-        self.apply_button.setStyleSheet(
-            button_style(self.accent)
-        )
-        self.apply_button.clicked.connect(
-            self._apply_calibration_values
-        )
+        self.apply_button = QPushButton("APPLY CALIBRATION VALUES")
+        self.apply_button.setStyleSheet(button_style(self.accent))
+        self.apply_button.clicked.connect(self._apply_calibration_values)
 
         layout.addWidget(
             self.apply_button,
@@ -487,17 +451,11 @@ class PSUCalibrationPopup(QDialog):
         layout = QHBoxLayout()
 
         self.output_button = QPushButton("TURN OUTPUT ON")
-        self.output_button.clicked.connect(
-            self._toggle_output
-        )
+        self.output_button.clicked.connect(self._toggle_output)
 
         self.start_button = QPushButton("START TEST")
-        self.start_button.setStyleSheet(
-            button_style(C["green"])
-        )
-        self.start_button.clicked.connect(
-            self._start_test
-        )
+        self.start_button.setStyleSheet(button_style(C["green"]))
+        self.start_button.clicked.connect(self._start_test)
 
         cancel_button = QPushButton("CANCEL")
         cancel_button.clicked.connect(self.reject)
@@ -515,14 +473,10 @@ class PSUCalibrationPopup(QDialog):
             current = float(self.current_input.text())
 
             if voltage < 0:
-                raise ValueError(
-                    "Calibration voltage cannot be negative."
-                )
+                raise ValueError("Calibration voltage cannot be negative.")
 
             if current < 0:
-                raise ValueError(
-                    "Calibration current cannot be negative."
-                )
+                raise ValueError("Calibration current cannot be negative.")
 
             if self.ui_test_mode:
                 result = {
@@ -557,10 +511,7 @@ class PSUCalibrationPopup(QDialog):
         )
 
     def _toggle_output(self):
-        if (
-            self.psu.calibrated_voltage is None
-            or self.psu.calibrated_current is None
-        ):
+        if self.psu.calibrated_voltage is None or self.psu.calibrated_current is None:
             QMessageBox.warning(
                 self,
                 "Calibration Values Not Applied",
@@ -573,7 +524,7 @@ class PSUCalibrationPopup(QDialog):
         try:
             if self.ui_test_mode:
                 actual_state = requested_state
-            else:  
+            else:
                 actual_state = psu_set_power(
                     self.psu.idx,
                     requested_state,
@@ -598,34 +549,23 @@ class PSUCalibrationPopup(QDialog):
             self.psu.current_a = 0.0
 
         self.output_button.setText(
-            "TURN OUTPUT OFF"
-            if actual_state
-            else "TURN OUTPUT ON"
+            "TURN OUTPUT OFF" if actual_state else "TURN OUTPUT ON"
         )
 
         self._refresh_readback()
 
     def _refresh_readback(self):
-        self.voltage_readback.setText(
-            f"{self.psu.voltage_v:.3f} V"
-        )
-        self.current_readback.setText(
-            f"{self.psu.current_a:.3f} A"
-        )
+        self.voltage_readback.setText(f"{self.psu.voltage_v:.3f} V")
+        self.current_readback.setText(f"{self.psu.current_a:.3f} A")
 
         if self.psu.power_on:
             self.output_readback.setText("ON")
-            self.output_readback.setStyleSheet(
-                f"color: {C['green']}; border: 0;"
-            )
+            self.output_readback.setStyleSheet(f"color: {C['green']}; border: 0;")
             self.output_button.setText("TURN OUTPUT OFF")
         else:
             self.output_readback.setText("OFF")
-            self.output_readback.setStyleSheet(
-                f"color: {C['dim']}; border: 0;"
-            )
+            self.output_readback.setStyleSheet(f"color: {C['dim']}; border: 0;")
             self.output_button.setText("TURN OUTPUT ON")
-
 
     def _start_test(self):
         if self.ui_test_mode:
@@ -650,13 +590,9 @@ class PSUCalibrationPopup(QDialog):
 
                 if calibration_current < 0:
                     raise ValueError("Calibration current cannot be negative")
-                
+
             except ValueError as error:
-                QMessageBox.warning(
-                    self,
-                    "Invalid Calibration Values", 
-                    str(error)
-                )
+                QMessageBox.warning(self, "Invalid Calibration Values", str(error))
 
             # Simulate the final calibrated operating values
             self.psu.calibrated_voltage = calibration_voltage
@@ -671,8 +607,6 @@ class PSUCalibrationPopup(QDialog):
             self.psu.voltage_v = calibration_voltage
             self.psu.current_a = calibration_current
 
-
-            
         else:
             if (
                 self.psu.calibrated_voltage is None
@@ -690,12 +624,8 @@ class PSUCalibrationPopup(QDialog):
         self.psu.test_active = True
         self.psu.test_start_dt = datetime.datetime.now()
 
-            
-
         self.on_test_started(self.psu.idx)
         self.accept()
-
-    
 
 
 class PSUDetailPopup(QDialog):
@@ -744,34 +674,31 @@ class PSUDetailPopup(QDialog):
         self.current_input = QLineEdit()
 
         layout.addWidget(label("ETR NUMBER:", FMS, C["dim"]), 0, 0)
-        layout.addWidget(self.etr_input,0 ,1)
+        layout.addWidget(self.etr_input, 0, 1)
 
         layout.addWidget(label("TECHNICIAN:", FMS, C["dim"]), 0, 2)
-        layout.addWidget(self.technician_input,0 ,3)
+        layout.addWidget(self.technician_input, 0, 3)
 
         layout.addWidget(label("TARGET HOURS:", FMS, C["dim"]), 1, 0)
-        layout.addWidget(self.target_input,1 ,1)
+        layout.addWidget(self.target_input, 1, 1)
 
         layout.addWidget(label("SET VOLTAGE:", FMS, C["dim"]), 1, 2)
-        layout.addWidget(self.voltage_input,1 ,3)
-        layout.addWidget(label("V", FMS, C["dim"]), 1,4)
-
+        layout.addWidget(self.voltage_input, 1, 3)
+        layout.addWidget(label("V", FMS, C["dim"]), 1, 4)
 
         layout.addWidget(label("SET CURRENT:", FMS, C["dim"]), 2, 2)
-        layout.addWidget(self.current_input,2 ,3)
-        layout.addWidget(label("A", FMS, C["dim"]), 2,4)
-
+        layout.addWidget(self.current_input, 2, 3)
+        layout.addWidget(label("A", FMS, C["dim"]), 2, 4)
 
         self.apply_status = label(
             "Enter the test configuration, then select APPLY.",
-            FMS, C["dim"],
+            FMS,
+            C["dim"],
         )
 
         layout.addWidget(self.apply_status, 3, 0, 1, 5)
 
         root.addWidget(settings_panel)
-
-
 
     def _build_action_buttons(self, root):
         layout = QHBoxLayout()
@@ -799,18 +726,12 @@ class PSUDetailPopup(QDialog):
         technician = self.technician_input.text().strip()
 
         if not etr_number:
-            QMessageBox.warning(
-                self,
-                "Missing ETR Number",
-                "Enter an ETR Number."
-            )
+            QMessageBox.warning(self, "Missing ETR Number", "Enter an ETR Number.")
             return
 
         if not technician:
             QMessageBox.warning(
-                self,
-                "Missing Technician",
-                "Enter the technician name."
+                self, "Missing Technician", "Enter the technician name."
             )
             return
 
@@ -819,10 +740,10 @@ class PSUDetailPopup(QDialog):
             voltage = float(self.voltage_input.text())
             current = float(self.current_input.text())
 
-            if target_hours <=0:
+            if target_hours <= 0:
                 raise ValueError("Target hours must be grater than zero.")
 
-            if voltage <0:
+            if voltage < 0:
                 raise ValueError("Voltage cannot be negative.")
 
             if current < 0:
@@ -870,17 +791,14 @@ class PSUDetailPopup(QDialog):
             f"Settings applied: {voltage:.3f} V and {current:.3f} A"
         )
 
-        self.apply_status.setStyleSheet(
-            f"color: {C['green']}; border: 0;"
-        )
+        self.apply_status.setStyleSheet(f"color: {C['green']}; border: 0;")
 
         self.setWindowTitle(
-            f"PSU{self.psu.idx + 1}"
-            f"{self.psu.etr_number} Configuration and History"
+            f"PSU{self.psu.idx + 1}{self.psu.etr_number} Configuration and History"
         )
 
         self.refresh()
-    
+
     def _build_header(self, root):
         header = panel()
 

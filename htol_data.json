@@ -100,24 +100,8 @@
   "completed_tests": [],
   "event_log": [
     {
-      "ts": "2026-08-24T08:46:14",
-      "msg": "Resumed active tests: PSU1/342"
-    },
-    {
-      "ts": "2026-08-24T08:57:51",
-      "msg": "HTOL Monitor v3.0 initialized. Continuous monitoring active."
-    },
-    {
-      "ts": "2026-08-24T08:57:51",
-      "msg": "Resumed active tests: PSU1/342"
-    },
-    {
-      "ts": "2026-08-24T08:58:51",
-      "msg": "HTOL Monitor v3.0 initialized. Continuous monitoring active."
-    },
-    {
-      "ts": "2026-08-24T08:58:51",
-      "msg": "Resumed active tests: PSU1/342"
+      "ts": "2026-08-24T09:22:00",
+      "msg": "Resumed active tests: PSU1/342, PSU2/123"
     }
   ]
 }

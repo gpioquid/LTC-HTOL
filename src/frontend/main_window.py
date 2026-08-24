@@ -43,12 +43,7 @@ from src.frontend.widgets import (
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(PROJECT_DIR / ".env")
 
-UI_TEST_MODE = (
-    os.getenv("UI_TEST_MODE", "false")
-    .strip()
-    .lower()
-    == "true"
-)
+UI_TEST_MODE = os.getenv("UI_TEST_MODE", "false").strip().lower() == "true"
 
 NUM_PSU = int(os.environ["NUM_PSU"])
 POLL_MS = int(os.environ["POLL_MS"])
@@ -558,14 +553,14 @@ class HTOLMonitor(QMainWindow):
         self._auto_save()
 
     def _on_detail_settings_applied(
-            self,
-            index,
-            etr_number,
-            technician,
-            target_hours,
-            voltage,
-            current,
-        ):
+        self,
+        index,
+        etr_number,
+        technician,
+        target_hours,
+        voltage,
+        current,
+    ):
         psu = self.psus[index]
 
         psu.etr_number = etr_number
@@ -575,11 +570,11 @@ class HTOLMonitor(QMainWindow):
         psu.set_current = current
 
         channel = self.psu_panel_widget.channel_widgets[index]
-        
+
         channel.update_state(psu)
 
         self._log(
-            f"PSU{index+1} settings applied: "
+            f"PSU{index + 1} settings applied: "
             f"ETR: {etr_number} "
             f"Tech: {technician}"
             f"Target: {target_hours:g} h"
@@ -639,7 +634,7 @@ class HTOLMonitor(QMainWindow):
             self,
             self.psus[index],
             self._on_test_started,
-            ui_test_mode = UI_TEST_MODE,
+            ui_test_mode=UI_TEST_MODE,
         )
 
         self._show_dialog(dialog)
@@ -755,7 +750,6 @@ class HTOLMonitor(QMainWindow):
                     psu.current_a = 0.0
             else:
                 reading = psu_read(index)
-                
 
                 psu.online = reading["online"]
                 psu.power_on = reading["power_on"]

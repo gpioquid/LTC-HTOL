@@ -11,10 +11,10 @@ def main():
     app = QApplication(sys.argv)
     app.setStyleSheet(APP_STYLESHEET)
 
-    #connect the PSUs before monitoring starts
+    # connect the PSUs before monitoring starts
     connect_psus()
 
-    #Automatically close PSU and VISA resources when the app exits
+    # Automatically close PSU and VISA resources when the app exits
     app.aboutToQuit.connect(disconnect_psus)
 
     window = HTOLMonitor()

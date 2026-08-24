@@ -25,24 +25,23 @@ class PSUState:
         self.power_on = False
         self.fault = False
 
-        self.voltage_v = 0 # readback
-        self.current_a = 0 # readback
+        self.voltage_v = 0  # readback
+        self.current_a = 0  # readback
 
-        #Original required test parameters
+        # Original required test parameters
         self.set_voltage = None
         self.set_current = None
 
-        #Final PSU values determined during calibration
+        # Final PSU values determined during calibration
         self.calibrated_voltage = None
         self.calibrated_current = None
 
         self.calibrated_active = False
         self.calibration_complete = False
 
-        
         self.notes = ""
         self.test_start_dt = None
-        self.test_active = False  
+        self.test_active = False
 
         self.current_hist = deque(maxlen=MAX_HIST)
         self.voltage_hist = deque(maxlen=MAX_HIST)
