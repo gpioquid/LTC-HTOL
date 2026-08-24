@@ -628,33 +628,69 @@ class PSUCalibrationPopup(QDialog):
 
 
     def _start_test(self):
-        if not self.psu.power_on:
-            QMessageBox.warning(
-                self,
-                "Output Is Off",
-                "Turn on the PSU output before starting the test.",
-            )
-            return
+        if self.ui_test_mode:
+            try:
+                voltage_text = self.voltage_input.text().strip()
+                current_text = self.current_input.text().strip()
 
-        if (
-            self.psu.calibrated_voltage is None
-            or self.psu.calibrated_current is None
-        ):
-            QMessageBox.warning(
-                self,
-                "Calibration Incomplete",
-                "Apply valid calibration values before starting.",
-            )
-            return
+                calibration_voltage = (
+                    float(voltage_text)
+                    if voltage_text
+                    else float(self.psu.set_voltage or 0.0)
+                )
+
+                calibration_current = (
+                    float(current_text)
+                    if current_text
+                    else float(self.psu.set_current or 0.0)
+                )
+
+                if calibration_voltage < 0:
+                    raise ValueError("Calibration voltage cannot be negative")
+
+                if calibration_current < 0:
+                    raise ValueError("Calibration current cannot be negative")
+                
+            except ValueError as error:
+                QMessageBox.warning(
+                    self,
+                    "Invalid Calibration Values", 
+                    str(error)
+                )
+
+            # Simulate the final calibrated operating values
+            self.psu.calibrated_voltage = calibration_voltage
+            self.psu.calibrated_current = calibration_current
+
+            # Simulate an online PSU with its output enabled
+            self.psu.online = True
+            self.psu.power_on = True
+            self.psu.fault = False
+
+            # Simulate measured readback values
+            self.psu.voltage_v = calibration_voltage
+            self.psu.current_a = calibration_current
+
+
+            
+        else:
+            if (
+                self.psu.calibrated_voltage is None
+                or self.psu.calibrated_current is None
+            ):
+                QMessageBox.warning(
+                    self,
+                    "Calibration Incomplete",
+                    "Apply valid calibration values before starting.",
+                )
+                return
 
         self.psu.calibration_active = False
         self.psu.calibration_complete = True
         self.psu.test_active = True
         self.psu.test_start_dt = datetime.datetime.now()
 
-        if self.ui_test_mode:
-            self.psu.online = True
-            self.psu.fault = False
+            
 
         self.on_test_started(self.psu.idx)
         self.accept()
