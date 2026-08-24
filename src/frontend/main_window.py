@@ -43,6 +43,13 @@ from src.frontend.widgets import (
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(PROJECT_DIR / ".env")
 
+UI_TEST_MODE = (
+    os.getenv("UI_TEST_MODE", "false")
+    .strip()
+    .lower()
+    == "true"
+)
+
 NUM_PSU = int(os.environ["NUM_PSU"])
 POLL_MS = int(os.environ["POLL_MS"])
 AUTO_SAVE_INTERVAL = int(os.environ["AUTO_SAVE_INTERVAL"])
@@ -632,6 +639,7 @@ class HTOLMonitor(QMainWindow):
             self,
             self.psus[index],
             self._on_test_started,
+            ui_test_mode = UI_TEST_MODE,
         )
 
         self._show_dialog(dialog)
@@ -733,26 +741,39 @@ class HTOLMonitor(QMainWindow):
 
     def _fetch_psu_readings(self, now):
         for index, psu in enumerate(self.psus):
-            reading = psu_read(index)
             previous_fault = psu.fault
+            if UI_TEST_MODE:
+                psu.online = True
+                psu.fault = False
 
-            psu.online = reading["online"]
-            psu.power_on = reading["power_on"]
-            psu.voltage_v = reading["voltage_v"]
-            psu.current_a = reading["current_a"]
-            psu.fault = reading["fault"]
+                if psu.power_on:
+                    psu.voltage_v = float(psu.calibrated_voltage or 0.0)
+                    psu.current_a = float(psu.calibrated_current or 0.0)
 
-            if psu.test_active and psu.power_on:
-                psu.hours_elapsed += POLL_MS / 3_600_000
+                else:
+                    psu.voltage_v = 0.0
+                    psu.current_a = 0.0
+            else:
+                reading = psu_read(index)
+                
 
-            psu.current_hist.append(psu.current_a)
-            psu.voltage_hist.append(psu.voltage_v)
-            psu.time_hist.append(now)
+                psu.online = reading["online"]
+                psu.power_on = reading["power_on"]
+                psu.voltage_v = reading["voltage_v"]
+                psu.current_a = reading["current_a"]
+                psu.fault = reading["fault"]
 
-            if psu.fault and not previous_fault:
-                self.bus.error.emit(
-                    f"FAULT detected on PSU{index + 1} ({psu.etr_number})"
-                )
+                if psu.test_active and psu.power_on:
+                    psu.hours_elapsed += POLL_MS / 3_600_000
+
+                psu.current_hist.append(psu.current_a)
+                psu.voltage_hist.append(psu.voltage_v)
+                psu.time_hist.append(now)
+
+                if psu.fault and not previous_fault:
+                    self.bus.error.emit(
+                        f"FAULT detected on PSU{index + 1} ({psu.etr_number})"
+                    )
 
     def _fetch_chamber_reading(self, now):
         reading = thermocouple_read()

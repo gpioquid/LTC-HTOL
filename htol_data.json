@@ -13,55 +13,23 @@
       "calibrated_current": 3.0,
       "calibration_complete": true,
       "test_active": true,
-      "current_snap": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
+      "current_snap": [],
       "temp_snap": []
     },
     "1": {
-      "etr_number": "ETR-1002",
-      "technician": "\u2014",
-      "target_hrs": 1000,
+      "etr_number": "1312",
+      "technician": "cedrick",
+      "target_hrs": 1000.0,
       "hours_elapsed": 0.0,
       "notes": "",
       "test_start_dt": null,
-      "set_voltage": null,
-      "set_current": null,
+      "set_voltage": 2.0,
+      "set_current": 3.0,
       "calibrated_voltage": null,
       "calibrated_current": null,
       "calibration_complete": false,
       "test_active": false,
-      "current_snap": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
+      "current_snap": [],
       "temp_snap": []
     },
     "2": {
@@ -77,23 +45,7 @@
       "calibrated_current": null,
       "calibration_complete": false,
       "test_active": false,
-      "current_snap": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
+      "current_snap": [],
       "temp_snap": []
     },
     "3": {
@@ -109,23 +61,7 @@
       "calibrated_current": null,
       "calibration_complete": false,
       "test_active": false,
-      "current_snap": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
+      "current_snap": [],
       "temp_snap": []
     },
     "4": {
@@ -141,23 +77,7 @@
       "calibrated_current": null,
       "calibration_complete": false,
       "test_active": false,
-      "current_snap": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
+      "current_snap": [],
       "temp_snap": []
     },
     "5": {
@@ -173,31 +93,15 @@
       "calibrated_current": null,
       "calibration_complete": false,
       "test_active": false,
-      "current_snap": [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-      ],
+      "current_snap": [],
       "temp_snap": []
     }
   },
   "completed_tests": [],
   "event_log": [
     {
-      "ts": "2026-08-24T08:20:47",
-      "msg": "Data file: C:\\Users\\gpioquid\\Videos\\LTC\\HTOL\\htol_data.json"
+      "ts": "2026-08-24T08:46:14",
+      "msg": "Resumed active tests: PSU1/342"
     }
   ]
 }

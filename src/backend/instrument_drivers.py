@@ -1,12 +1,11 @@
 import os
+import random
 import threading
 from pathlib import Path
 from typing import Any
 
 import pyvisa
 from dotenv import load_dotenv
-import random
-
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(PROJECT_DIR / ".env")

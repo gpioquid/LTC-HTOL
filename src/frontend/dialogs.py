@@ -130,13 +130,11 @@ class PSUSetupPopup(QDialog):
             f"{float(self.psu.target_hrs):g}"
         )
 
-        self.required_voltage_input = QLineEdit(
-            f"{float(self.psu.set_voltage or 0.0):.3f}"
-        )
+        self.required_voltage_input = QLineEdit()
+        self.required_voltage_input.setPlaceholderText("Enter Voltage Rating")
 
-        self.required_current_input = QLineEdit(
-            f"{float(self.psu.set_current or 0.0):.3f}"
-        )
+        self.required_current_input = QLineEdit()
+        self.required_current_input.setPlaceholderText("Enter Current Rating")
 
         layout.addWidget(
             label("ETR NUMBER:", FMS, C["dim"]),
@@ -257,11 +255,13 @@ class PSUCalibrationPopup(QDialog):
         parent,
         psu,
         on_test_started,
+        ui_test_mode: bool = False,
     ):
         super().__init__(parent)
 
         self.psu = psu
         self.on_test_started = on_test_started
+        self.ui_test_mode = ui_test_mode
         self.accent = ACCENTS[psu.idx % len(ACCENTS)]
 
         self.setWindowTitle(
@@ -524,6 +524,13 @@ class PSUCalibrationPopup(QDialog):
                     "Calibration current cannot be negative."
                 )
 
+            if self.ui_test_mode:
+                result = {
+                    "success": True,
+                    "voltage": voltage,
+                    "current": current,
+                }
+
             result = psu_set_output(
                 self.psu.idx,
                 voltage,
@@ -564,10 +571,13 @@ class PSUCalibrationPopup(QDialog):
         requested_state = not self.psu.power_on
 
         try:
-            actual_state = psu_set_power(
-                self.psu.idx,
-                requested_state,
-            )
+            if self.ui_test_mode:
+                actual_state = requested_state
+            else:  
+                actual_state = psu_set_power(
+                    self.psu.idx,
+                    requested_state,
+                )
 
         except Exception as error:
             QMessageBox.critical(
@@ -578,6 +588,14 @@ class PSUCalibrationPopup(QDialog):
             return
 
         self.psu.power_on = actual_state
+
+        if self.ui_test_mode and actual_state:
+            self.psu.voltage_v = float(self.psu.calibrated_voltage)
+            self.psu.current_a = float(self.psu.calibrated_current)
+
+        elif self.ui_test_mode:
+            self.psu.voltage_v = 0.0
+            self.psu.current_a = 0.0
 
         self.output_button.setText(
             "TURN OUTPUT OFF"
@@ -633,6 +651,10 @@ class PSUCalibrationPopup(QDialog):
         self.psu.calibration_complete = True
         self.psu.test_active = True
         self.psu.test_start_dt = datetime.datetime.now()
+
+        if self.ui_test_mode:
+            self.psu.online = True
+            self.psu.fault = False
 
         self.on_test_started(self.psu.idx)
         self.accept()
