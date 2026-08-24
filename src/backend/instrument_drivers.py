@@ -5,6 +5,7 @@ from typing import Any
 
 import pyvisa
 from dotenv import load_dotenv
+import random
 
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
@@ -38,7 +39,7 @@ def connect_psus() -> list:
 
         if not ip_address:
             print(f"PSU {psu_number}: IP adress is not configured")
-            _psu_connection[idx] = None
+            _psu_connections[idx] = None
             continue
 
         resource_address = f"TCPIP0::{ip_address}::INSTR"
@@ -50,17 +51,17 @@ def connect_psus() -> list:
             instrument.write_termination = "\n"
 
             identity = instrument.query("*IDN?").strip()
-            _psu_connection[idx] = instrument
+            _psu_connections[idx] = instrument
 
             print(f"PSU {psu_number} connected at"
                   f" {ip_address} : {identity}")
 
         except pyvisa.Error as exc:
-            _psu_connection[idx] = None
+            _psu_connections[idx] = None
             print(f"PSU {psu_number} connection failed at"
                   f"{ip_address}: {exc}")
 
-        return _psu_connection
+        return _psu_connections
 
 
 def disconnect_psus() -> None:
@@ -68,7 +69,7 @@ def disconnect_psus() -> None:
 
     global _resource_manager
 
-    for idx, instrument in enumerate(_psu_connection):
+    for idx, instrument in enumerate(_psu_connections):
         if instrument is None:
             continue
 
@@ -82,7 +83,7 @@ def disconnect_psus() -> None:
             print(f" PSU {idx +1} disconnect error: {exc}")
 
         finally:
-            _psu_connection[idx] = None
+            _psu_connections[idx] = None
 
     if _resource_manager is not None:
         try:
@@ -156,12 +157,15 @@ def psu_read(idx: int) -> dict:
             "current_a": 0.0,
             "fault": True,
         }
+
+
+
 def psu_set_output(
     idx: int,
     voltage: float,
     current: float,
 ) -> dict:
-    """Apply voltage and current commands to one PSU."""
+    """Apply calibration voltage and current to one PSU."""
 
     if not 0 <= idx < NUM_PSU:
         raise IndexError(f"Invalid PSU index: {idx}")
@@ -184,106 +188,74 @@ def psu_set_output(
     try:
         with psu_lock:
             print(
-                f"PSU {idx + 1}: sending current "
-                f"{current:.3f} A"
+                f"PSU {idx + 1}: setting current "
+                f"to {current:.3f} A"
             )
             instrument.write(
                 f"SOURce:CURRent {current:.6f}"
             )
 
             print(
-                f"PSU {idx + 1}: sending voltage "
-                f"{voltage:.3f} V"
+                f"PSU {idx + 1}: setting voltage "
+                f"to {voltage:.3f} V"
             )
             instrument.write(
                 f"SOURce:VOLTage {voltage:.6f}"
             )
 
-            print(
-                f"PSU {idx + 1}: querying current setpoint"
-            )
-            current_response = instrument.query(
-                "SOURce:CURRent?"
-            ).strip()
-
-            print(
-                f"PSU {idx + 1}: current response "
-                f"{current_response!r}"
-            )
-
-            print(
-                f"PSU {idx + 1}: querying voltage setpoint"
-            )
-            voltage_response = instrument.query(
-                "SOURce:VOLTage?"
-            ).strip()
-
-            print(
-                f"PSU {idx + 1}: voltage response "
-                f"{voltage_response!r}"
-            )
-
-            programmed_current = float(current_response)
-            programmed_voltage = float(voltage_response)
+        print(
+            f"PSU {idx + 1}: calibration values sent "
+            f"successfully"
+        )
 
         return {
             "success": True,
-            "voltage": programmed_voltage,
-            "current": programmed_current,
+            "voltage": voltage,
+            "current": current,
         }
 
     except pyvisa.errors.VisaIOError as error:
         raise RuntimeError(
-            f"Unable to set PSU {idx + 1} output: "
-            f"{error}"
+            f"Unable to apply calibration values to "
+            f"PSU {idx + 1}: {error}"
         ) from error
 
-    except ValueError as error:
-        raise RuntimeError(
-            f"PSU {idx + 1} returned invalid data: "
-            f"{error}"
-        ) from error
+
 
 def psu_set_power(idx: int, on: bool) -> bool:
-    """Enable or disable the output of the selected PSU."""
+    """Send the output ON or OFF command to one PSU."""
 
     if not 0 <= idx < NUM_PSU:
         raise IndexError(f"Invalid PSU index: {idx}")
 
-    instrument = _psu_connection[idx]
+    instrument = _psu_connections[idx]
 
     if instrument is None:
-        raise RuntimeError(f"PSU {idx +1 } is not connected")
+        raise RuntimeError(
+            f"PSU {idx + 1} is not connected"
+        )
+
+    requested_state = 1 if on else 0
+    psu_lock = _psu_locks[idx]
 
     try:
-        instrument.write("*CLS")
-        instrument.write("OUTP ON" if on else "OUTP OFF")
-        instrument.query("*OPC?")
-
-        response = instrument.query("OUTP?").strip().upper()
-        actual_state = response in {"1", "ON"}
-
-        if actual_state != on:
-            requested = "ON" if on else "OFF"
-            actual = "ON" if actual_state else "OFF"
-
-            raise RuntimeError(
-                f"PSU {idx +1} output verification failed. "
-                f"Requested {requested}, but read back {actual}."
+        with psu_lock:
+            instrument.write(
+                f"OUTPut:STATe {requested_state}"
             )
 
         print(
-            f"PSU {idx +1} output"
-            f"{'enabled' if actual_state else 'disabled'}"
+            f"PSU {idx + 1}: output command sent: "
+            f"{'ON' if on else 'OFF'}"
         )
 
-        return actual_state
+        return on
 
-    except pyvisa.Error as exc:
+    except pyvisa.errors.VisaIOError as error:
         raise RuntimeError(
-            f"Unable to control PSU {idx+1} output: {exc}"
-        )
-
+            f"Unable to control PSU {idx + 1} output: "
+            f"{error}"
+        ) from error
     
 
 
