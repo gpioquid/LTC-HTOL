@@ -200,13 +200,8 @@ class PSUChannelWidget(QFrame):
             FMB,
             self.accent,
         )
-        self.target_label = create_label(
-            "0 / 1000 h",
-            FMB,
-            C["text"],
-        )
+        
 
-        progress_header.addWidget(self.target_label)
 
         progress_header.addStretch()
 
@@ -217,8 +212,12 @@ class PSUChannelWidget(QFrame):
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 1000)
         self.progress_bar.setValue(0)
-        self.progress_bar.setTextVisible(False)
-        self.progress_bar.setMinimumHeight(12)
+        self.progress_bar.setFormat("0 / 1000 h")
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.progress_bar.setMinimumHeight(24)
+        
 
         content_layout.addWidget(self.progress_bar)
 
@@ -341,14 +340,6 @@ class PSUChannelWidget(QFrame):
     def update_state(self, psu):
         self.psu = psu
 
-        target_hours = getattr(
-            psu,
-            "target_hours",
-            1000,
-        )
-
-        self.target_label.setText(f"{psu.hours_elapsed:.1f} / {target_hours:.0f} h")
-
         self.etr_label.setText(psu.etr_number or "NO ETR")
         self.technician_label.setText(psu.technician or "—")
 
@@ -378,6 +369,13 @@ class PSUChannelWidget(QFrame):
             """
         )
 
+        target_hours = getattr(
+            psu,
+            "target_hrs",
+            1000,
+        )
+
+
         progress = max(
             0.0,
             min(
@@ -386,15 +384,27 @@ class PSUChannelWidget(QFrame):
             ),
         )
 
-        self.progress_text.setText(f"{progress:.1f}%")
-        self.progress_bar.setValue(round(progress * 10))
+        self.progress_text.setText(
+            f"{progress:.1f}%"
+        )
+
+        self.progress_bar.setValue(
+            round(progress * 10)
+        )
+
+        self.progress_bar.setFormat(
+            f"{psu.hours_elapsed:.1f} / "
+            f"{target_hours:g} h"
+        )
         self.progress_bar.setStyleSheet(
             f"""
             QProgressBar {{
+                color: {C["text"]};
                 background: {C["tile_bg"]};
-                border: 1px solid
-                    {C["border2"]};
+                border: 1px solid {C["border2"]};
                 border-radius: 5px;
+                text-align: center;
+                padding: 0px;
             }}
 
             QProgressBar::chunk {{
