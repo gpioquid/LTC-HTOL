@@ -1,34 +1,18 @@
 {
   "live_state": {
-    "0": {
-      "etr_number": "342",
-      "technician": "cedrick",
-      "target_hrs": 1000.0,
-      "hours_elapsed": 0.009722222222222222,
-      "notes": "",
-      "test_start_dt": "2026-08-24T08:21:26.442857",
-      "set_voltage": 5.0,
-      "set_current": 5.0,
-      "calibrated_voltage": 3.0,
-      "calibrated_current": 3.0,
-      "calibration_complete": true,
-      "test_active": true,
-      "current_snap": [],
-      "temp_snap": []
-    },
     "1": {
-      "etr_number": "123",
-      "technician": "dasa",
-      "target_hrs": 1000.0,
+      "etr_number": "ETR-1002",
+      "technician": "\u2014",
+      "target_hrs": 1000,
       "hours_elapsed": 0.0,
       "notes": "",
-      "test_start_dt": "2026-08-24T08:59:02.006548",
-      "set_voltage": 1.0,
-      "set_current": 2.0,
-      "calibrated_voltage": 1.0,
-      "calibrated_current": 2.0,
-      "calibration_complete": true,
-      "test_active": true,
+      "test_start_dt": null,
+      "set_voltage": null,
+      "set_current": null,
+      "calibrated_voltage": null,
+      "calibrated_current": null,
+      "calibration_complete": false,
+      "test_active": false,
       "current_snap": [],
       "temp_snap": []
     },
@@ -95,21 +79,75 @@
       "test_active": false,
       "current_snap": [],
       "temp_snap": []
+    },
+    "0": {
+      "etr_number": "342",
+      "technician": "cedrick",
+      "target_hrs": 1000.0,
+      "hours_elapsed": 1000.0,
+      "notes": "",
+      "test_start_dt": "2026-08-24T08:21:26.442857",
+      "set_voltage": 5.0,
+      "set_current": 5.0,
+      "calibrated_voltage": 3.0,
+      "calibrated_current": 3.0,
+      "calibration_complete": true,
+      "test_active": true,
+      "current_snap": [],
+      "temp_snap": []
     }
   },
-  "completed_tests": [],
-  "event_log": [
+  "completed_tests": [
     {
-      "ts": "2026-08-24T10:25:56",
-      "msg": "Resumed active tests: PSU1/342, PSU2/123"
+      "psu_idx": 0,
+      "psu_label": "PSU1",
+      "etr_number": "342",
+      "technician": "cedrick",
+      "started_at": "2026-08-24T08:21:26",
+      "completed_at": "2026-08-24T10:45:26",
+      "hours_elapsed": 1000.0,
+      "target_hrs": 1000.0,
+      "progress_pct": 100.0,
+      "required_voltage": 5.0,
+      "required_current": 5.0,
+      "calibrated_voltage": 3.0,
+      "calibrated_current": 3.0,
+      "avg_voltage_v": 0.0,
+      "avg_current_a": 0.0,
+      "avg_temp_c": 123.1,
+      "notes": "",
+      "current_snapshot": [],
+      "voltage_snapshot": [],
+      "temp_snapshot": [
+        123.1,
+        123.1
+      ]
     },
     {
-      "ts": "2026-08-24T10:26:38",
-      "msg": "HTOL Monitor v3.0 initialized. Continuous monitoring active."
-    },
-    {
-      "ts": "2026-08-24T10:26:38",
-      "msg": "Resumed active tests: PSU1/342, PSU2/123"
+      "psu_idx": 0,
+      "psu_label": "PSU1",
+      "etr_number": "342",
+      "technician": "cedrick",
+      "started_at": "2026-08-24T08:21:26",
+      "completed_at": "2026-08-24T10:45:27",
+      "hours_elapsed": 1000.0,
+      "target_hrs": 1000.0,
+      "progress_pct": 100.0,
+      "required_voltage": 5.0,
+      "required_current": 5.0,
+      "calibrated_voltage": 3.0,
+      "calibrated_current": 3.0,
+      "avg_voltage_v": 0.0,
+      "avg_current_a": 0.0,
+      "avg_temp_c": 123.1,
+      "notes": "",
+      "current_snapshot": [],
+      "voltage_snapshot": [],
+      "temp_snapshot": [
+        123.1,
+        123.1
+      ]
     }
-  ]
+  ],
+  "event_log": []
 }

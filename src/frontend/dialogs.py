@@ -630,12 +630,13 @@ class PSUCalibrationPopup(QDialog):
 
 
 class PSUDetailPopup(QDialog):
-    def __init__(self, parent, psu, chamber, on_apply):
+    def __init__(self, parent, psu, chamber, on_apply, on_ui_test_complete=None):
         super().__init__(parent)
 
         self.psu = psu
         self.chamber = chamber
         self.on_apply = on_apply
+        self.on_ui_test_complete = on_ui_test_complete
         self.configuration_unlocked = False
         self.accent = ACCENTS[psu.idx % len(ACCENTS)]
 
@@ -809,11 +810,22 @@ class PSUDetailPopup(QDialog):
 
         # Lock fields after every widget has been created.
         self._set_configuration_locked(True)
-    
+
     def _build_action_buttons(self, root) -> None:
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
+
+        # Available only when UI Test Mode supplies a callback.
+        self.ui_test_complete_button = QPushButton(
+            "UI TEST MODE: COMPLETE TEST"
+        )
+        self.ui_test_complete_button.clicked.connect(
+            self._ui_test_complete_test
+        )
+        self.ui_test_complete_button.setVisible(
+            self.on_ui_test_complete is not None
+        )
 
         self.lock_button = QPushButton(
             "EDIT TEST PARAMETERS"
@@ -843,7 +855,13 @@ class PSUDetailPopup(QDialog):
             self.close
         )
 
+        # UI Test Mode action stays on the left.
+        layout.addWidget(
+            self.ui_test_complete_button
+        )
+
         layout.addStretch()
+
         layout.addWidget(self.lock_button)
         layout.addWidget(self.apply_button)
         layout.addWidget(refresh_button)
@@ -851,6 +869,38 @@ class PSUDetailPopup(QDialog):
 
         root.addLayout(layout)
 
+
+    def _ui_test_complete_test(self) -> None:
+        if self.on_ui_test_complete is None:
+            return
+
+        response = QMessageBox.warning(
+            self,
+            "UI Test Mode: Complete Test",
+            (
+                "UI Test Mode will fast-forward this test "
+                "to its configured target duration.\n\n"
+                "The normal test completion dialog will "
+                "open afterward.\n\n"
+                "No command will be sent to a physical PSU.\n\n"
+                "Continue?"
+            ),
+            QMessageBox.StandardButton.Yes
+            | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+
+        if response != QMessageBox.StandardButton.Yes:
+            return
+
+        psu_index = self.psu.idx
+
+        # Close the test-session dialog first.
+        self.accept()
+
+        # Ask the main window to fast-forward and open
+        # the normal completion dialog.
+        self.on_ui_test_complete(psu_index)
 
     def _set_configuration_locked(
         self,
@@ -1543,78 +1593,310 @@ class PSUDetailPopup(QDialog):
 
 
 class CompleteTestDialog(QDialog):
-    def __init__(self, parent, psu, chamber, store, on_complete):
+    def __init__(
+        self,
+        parent,
+        psu,
+        chamber,
+        store,
+        on_complete,
+    ):
         super().__init__(parent)
+
         self.psu = psu
         self.chamber = chamber
         self.store = store
         self.on_complete = on_complete
-        self.setWindowTitle(f"Complete Test — PSU{psu.idx + 1} / {psu.etr_number}")
-        self.resize(500, 520)
-        root = QVBoxLayout(self)
-        root.addWidget(label("◈  MARK TEST COMPLETE", FML, ACCENTS[psu.idx]))
-        summary = panel()
-        g = QGridLayout(summary)
-        rows = [
-            ("ETR Number", psu.etr_number),
-            ("Technician", psu.technician),
-            ("Hours Elapsed", f"{psu.hours_elapsed:.2f} h"),
-            ("Target Hours", f"{psu.target_hrs} h"),
-            ("Progress", f"{psu.progress_pct:.1f}%"),
-            ("Chamber Temp", f"{chamber.temp_c:.1f} °C" if chamber.online else "—"),
+        self.accent = ACCENTS[
+            psu.idx % len(ACCENTS)
         ]
-        for i, (a, b) in enumerate(rows):
-            g.addWidget(label(a + ":", FMS, C["dim"]), i, 0)
-            g.addWidget(label(b), i, 1)
-        root.addWidget(summary)
-        root.addWidget(label("OUTCOME:", FMS, C["dim"]))
-        oh = QHBoxLayout()
-        self.outcomes = QButtonGroup(self)
-        for i, opt in enumerate(("PASS", "FAIL", "ABORT", "ARCHIVE")):
-            b = QRadioButton(opt)
-            self.outcomes.addButton(b, i)
-            oh.addWidget(b)
-            b.setChecked(i == 0)
-        root.addLayout(oh)
-        root.addWidget(label("FINAL NOTES:", FMS, C["dim"]))
-        self.notes = QPlainTextEdit(psu.notes)
-        root.addWidget(self.notes)
-        bh = QHBoxLayout()
-        ok = QPushButton("✔ CONFIRM & ARCHIVE")
-        ok.clicked.connect(self.confirm)
-        cancel = QPushButton("✕ CANCEL")
-        cancel.clicked.connect(self.reject)
-        bh.addWidget(ok)
-        bh.addWidget(cancel)
-        root.addLayout(bh)
 
-    def confirm(self):
-        p = self.psu
-        c = self.chamber
-        rec = {
-            "psu_idx": p.idx,
-            "psu_label": f"PSU{p.idx + 1}",
-            "etr_number": p.etr_number,
-            "technician": p.technician,
-            "started_at": p.test_start_dt.isoformat(timespec="seconds")
-            if p.test_start_dt
-            else "—",
-            "completed_at": datetime.datetime.now().isoformat(timespec="seconds"),
-            "hours_elapsed": round(p.hours_elapsed, 4),
-            "target_hrs": p.target_hrs,
-            "avg_current_a": round(sum(p.current_hist) / len(p.current_hist), 4)
-            if p.current_hist
-            else 0.0,
-            "avg_temp_c": round(sum(c.temp_hist) / len(c.temp_hist), 2)
-            if c.temp_hist
-            else 0.0,
-            "outcome": self.outcomes.checkedButton().text(),
-            "notes": self.notes.toPlainText().strip(),
-            "current_snapshot": list(p.current_hist)[-300:],
-            "temp_snapshot": list(c.temp_hist)[-300:],
+        self.setWindowTitle(
+            f"Complete Test - "
+            f"PSU{psu.idx + 1} / "
+            f"{psu.etr_number}"
+        )
+        self.resize(520, 520)
+        self.setMinimumSize(480, 460)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(12, 12, 12, 12)
+        root.setSpacing(10)
+
+        # Header
+        root.addWidget(
+            label(
+                "◈  COMPLETE TEST SESSION",
+                FML,
+                self.accent,
+            )
+        )
+
+        # High-level test summary
+        summary_panel = panel()
+        summary_layout = QGridLayout(summary_panel)
+        summary_layout.setContentsMargins(
+            12,
+            10,
+            12,
+            10,
+        )
+        summary_layout.setHorizontalSpacing(18)
+        summary_layout.setVerticalSpacing(7)
+
+        average_current = (
+            sum(psu.current_hist)
+            / len(psu.current_hist)
+            if psu.current_hist
+            else 0.0
+        )
+
+        average_voltage = (
+            sum(psu.voltage_hist)
+            / len(psu.voltage_hist)
+            if psu.voltage_hist
+            else 0.0
+        )
+
+        average_temperature = (
+            sum(chamber.temp_hist)
+            / len(chamber.temp_hist)
+            if chamber.temp_hist
+            else 0.0
+        )
+
+        started_at = (
+            psu.test_start_dt.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+            if psu.test_start_dt
+            else "—"
+        )
+
+        calibrated_voltage = (
+            f"{psu.calibrated_voltage:.3f} V"
+            if psu.calibrated_voltage is not None
+            else "—"
+        )
+
+        calibrated_current = (
+            f"{psu.calibrated_current:.3f} A"
+            if psu.calibrated_current is not None
+            else "—"
+        )
+
+        rows = [
+            (
+                "ETR Number",
+                psu.etr_number or "—",
+            ),
+            (
+                "Technician",
+                psu.technician or "—",
+            ),
+            (
+                "Started At",
+                started_at,
+            ),
+            (
+                "Test Duration",
+                f"{psu.hours_elapsed:.2f} h",
+            ),
+            (
+                "Target Duration",
+                f"{psu.target_hrs:g} h",
+            ),
+            (
+                "Completion",
+                f"{psu.progress_pct:.1f}%",
+            ),
+            (
+                "Required Parameters",
+                f"{float(psu.set_voltage or 0.0):.3f} V / "
+                f"{float(psu.set_current or 0.0):.3f} A",
+            ),
+            (
+                "Calibrated Parameters",
+                f"{calibrated_voltage} / "
+                f"{calibrated_current}",
+            ),
+            (
+                "Average Measurements",
+                f"{average_voltage:.3f} V / "
+                f"{average_current:.3f} A",
+            ),
+            (
+                "Average Chamber Temp",
+                (
+                    f"{average_temperature:.1f} °C"
+                    if chamber.temp_hist
+                    else "—"
+                ),
+            ),
+        ]
+
+        for row, (name, value) in enumerate(rows):
+            name_label = label(
+                f"{name}:",
+                FMS,
+                C["dim"],
+            )
+
+            value_label = label(
+                value,
+                FM,
+                C["text"],
+            )
+
+            value_label.setTextInteractionFlags(
+                Qt.TextInteractionFlag.TextSelectableByMouse
+            )
+
+            summary_layout.addWidget(
+                name_label,
+                row,
+                0,
+            )
+            summary_layout.addWidget(
+                value_label,
+                row,
+                1,
+            )
+
+        summary_layout.setColumnStretch(0, 0)
+        summary_layout.setColumnStretch(1, 1)
+
+        root.addWidget(summary_panel)
+
+        # Final notes
+        root.addWidget(
+            label(
+                "FINAL NOTES:",
+                FMS,
+                C["dim"],
+            )
+        )
+
+        self.notes = QPlainTextEdit(
+            psu.notes or ""
+        )
+        self.notes.setPlaceholderText(
+            "Enter final observations, test findings, "
+            "or completion remarks..."
+        )
+        self.notes.setMinimumHeight(140)
+
+        root.addWidget(self.notes, 1)
+
+        # Action buttons
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(8)
+
+        end_test_button = QPushButton(
+            "END TEST"
+        )
+        end_test_button.setStyleSheet(
+            button_style(self.accent)
+        )
+        end_test_button.clicked.connect(
+            self.confirm
+        )
+
+
+        button_layout.addWidget(end_test_button)
+        root.addLayout(button_layout)
+
+    def confirm(self) -> None:
+        psu = self.psu
+        chamber = self.chamber
+
+        final_notes = (
+            self.notes
+            .toPlainText()
+            .strip()
+        )
+
+        average_current = (
+            sum(psu.current_hist)
+            / len(psu.current_hist)
+            if psu.current_hist
+            else 0.0
+        )
+
+        average_voltage = (
+            sum(psu.voltage_hist)
+            / len(psu.voltage_hist)
+            if psu.voltage_hist
+            else 0.0
+        )
+
+        average_temperature = (
+            sum(chamber.temp_hist)
+            / len(chamber.temp_hist)
+            if chamber.temp_hist
+            else 0.0
+        )
+
+        record = {
+            "psu_idx": psu.idx,
+            "psu_label": f"PSU{psu.idx + 1}",
+            "etr_number": psu.etr_number,
+            "technician": psu.technician,
+            "started_at": (
+                psu.test_start_dt.isoformat(
+                    timespec="seconds"
+                )
+                if psu.test_start_dt
+                else "—"
+            ),
+            "completed_at": (
+                datetime.datetime.now().isoformat(
+                    timespec="seconds"
+                )
+            ),
+            "hours_elapsed": round(
+                psu.hours_elapsed,
+                4,
+            ),
+            "target_hrs": psu.target_hrs,
+            "progress_pct": round(
+                psu.progress_pct,
+                2,
+            ),
+            "required_voltage": psu.set_voltage,
+            "required_current": psu.set_current,
+            "calibrated_voltage": (
+                psu.calibrated_voltage
+            ),
+            "calibrated_current": (
+                psu.calibrated_current
+            ),
+            "avg_voltage_v": round(
+                average_voltage,
+                4,
+            ),
+            "avg_current_a": round(
+                average_current,
+                4,
+            ),
+            "avg_temp_c": round(
+                average_temperature,
+                2,
+            ),
+            "notes": final_notes,
+            "current_snapshot": list(
+                psu.current_hist
+            )[-300:],
+            "voltage_snapshot": list(
+                psu.voltage_hist
+            )[-300:],
+            "temp_snapshot": list(
+                chamber.temp_hist
+            )[-300:],
         }
-        self.store.complete_test(rec)
-        self.on_complete(p.idx, rec)
+
+        self.store.complete_test(record)
+        self.on_complete(psu.idx, record)
         self.accept()
 
 

@@ -474,6 +474,53 @@ class HTOLMonitor(QMainWindow):
         channel_widget.update_state(psu)
         self._auto_save()
 
+    def _ui_test_complete_test(
+        self,
+        index: int,
+    ) -> None:
+        if not UI_TEST_MODE:
+            return
+
+        psu = self.psus[index]
+
+        if not psu.test_active:
+            QMessageBox.information(
+                self,
+                "UI Test Mode",
+                f"PSU{index + 1} has no active test.",
+            )
+            return
+
+        # Fast-forward the software state to 100%.
+        psu.hours_elapsed = float(psu.target_hrs)
+
+        # Keep the test active until CompleteTestDialog
+        # confirms and archives it.
+        psu.test_active = True
+        psu.online = True
+        psu.power_on = True
+        psu.fault = False
+
+        channel = (
+            self.psu_panel_widget
+            .channel_widgets[index]
+        )
+        channel.update_state(psu)
+
+        self._log(
+            f"UI TEST MODE: PSU{index + 1} "
+            f"fast-forwarded to "
+            f"{psu.target_hrs:g} h."
+        )
+
+        self._auto_save()
+
+        # Open your existing CompleteTestDialog.
+        QTimer.singleShot(
+            0,
+            lambda: self._complete_test(index),
+        )
+
     def _complete_test(self, index):
         psu = self.psus[index]
 
@@ -606,7 +653,7 @@ class HTOLMonitor(QMainWindow):
             f"PSU{index + 1} setpoints updated: {voltage:.3f} V / {current:.3f} A"
         )
 
-    def _open_detail(self, index):
+    def _open_detail(self, index: int) -> None:
         try:
             psu = self.psus[index]
 
@@ -616,6 +663,11 @@ class HTOLMonitor(QMainWindow):
                     psu,
                     self.chamber,
                     self._on_detail_settings_applied,
+                    on_ui_test_complete=(
+                        self._ui_test_complete_test
+                        if UI_TEST_MODE
+                        else None
+                    ),
                 )
             else:
                 dialog = PSUSetupPopup(
