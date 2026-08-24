@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QCheckBox,
 )
 
 from src.backend.instrument_drivers import psu_set_output, psu_set_power
@@ -635,6 +636,7 @@ class PSUDetailPopup(QDialog):
         self.psu = psu
         self.chamber = chamber
         self.on_apply = on_apply
+        self.configuration_unlocked = False
         self.accent = ACCENTS[psu.idx % len(ACCENTS)]
 
         self.setWindowTitle(f"PSU{psu.idx + 1} Test Session")
@@ -659,7 +661,7 @@ class PSUDetailPopup(QDialog):
         self.ranges["Live"].setChecked(True)
         self.refresh()
 
-    def _build_settings(self, root):
+    def _build_settings(self, root) -> None:
         settings_panel = panel()
 
         layout = QGridLayout(settings_panel)
@@ -667,134 +669,401 @@ class PSUDetailPopup(QDialog):
         layout.setHorizontalSpacing(10)
         layout.setVerticalSpacing(8)
 
-        self.etr_input = QLineEdit(self.psu.etr_number)
-        self.technician_input = QLineEdit(self.psu.technician)
-        self.target_input = QLineEdit(str(self.psu.target_hrs))
-        self.voltage_input = QLineEdit()
-        self.current_input = QLineEdit()
-
-        layout.addWidget(label("ETR NUMBER:", FMS, C["dim"]), 0, 0)
-        layout.addWidget(self.etr_input, 0, 1)
-
-        layout.addWidget(label("TECHNICIAN:", FMS, C["dim"]), 0, 2)
-        layout.addWidget(self.technician_input, 0, 3)
-
-        layout.addWidget(label("TARGET HOURS:", FMS, C["dim"]), 1, 0)
-        layout.addWidget(self.target_input, 1, 1)
-
-        layout.addWidget(label("SET VOLTAGE:", FMS, C["dim"]), 1, 2)
-        layout.addWidget(self.voltage_input, 1, 3)
-        layout.addWidget(label("V", FMS, C["dim"]), 1, 4)
-
-        layout.addWidget(label("SET CURRENT:", FMS, C["dim"]), 2, 2)
-        layout.addWidget(self.current_input, 2, 3)
-        layout.addWidget(label("A", FMS, C["dim"]), 2, 4)
-
-        self.apply_status = label(
-            "Enter the test configuration, then select APPLY.",
+        # Section heading and lock status
+        settings_title = label(
+            "TEST CONFIGURATION",
             FMS,
             C["dim"],
         )
 
-        layout.addWidget(self.apply_status, 3, 0, 1, 5)
+        self.configuration_lock_label = label(
+            "LOCKED",
+            FMS,
+            C["green"],
+        )
+        self.configuration_lock_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight
+            | Qt.AlignmentFlag.AlignVCenter
+        )
+
+        layout.addWidget(settings_title, 0, 0, 1, 2)
+        layout.addWidget(
+            self.configuration_lock_label,
+            0,
+            2,
+            1,
+            3,
+        )
+
+        # Configuration fields
+        self.etr_input = QLineEdit(
+            self.psu.etr_number
+        )
+
+        self.technician_input = QLineEdit(
+            self.psu.technician
+        )
+
+        self.target_input = QLineEdit(
+            f"{self.psu.target_hrs:g}"
+        )
+
+        self.voltage_input = QLineEdit(
+            f"{float(self.psu.set_voltage or 0.0):.3f}"
+        )
+
+        self.current_input = QLineEdit(
+            f"{float(self.psu.set_current or 0.0):.3f}"
+        )
+
+        layout.addWidget(
+            label("ETR NUMBER:", FMS, C["dim"]),
+            1,
+            0,
+        )
+        layout.addWidget(
+            self.etr_input,
+            1,
+            1,
+        )
+
+        layout.addWidget(
+            label("TECHNICIAN:", FMS, C["dim"]),
+            1,
+            2,
+        )
+        layout.addWidget(
+            self.technician_input,
+            1,
+            3,
+            1,
+            2,
+        )
+
+        layout.addWidget(
+            label("TARGET HOURS:", FMS, C["dim"]),
+            2,
+            0,
+        )
+        layout.addWidget(
+            self.target_input,
+            2,
+            1,
+        )
+
+        layout.addWidget(
+            label("REQUIRED VOLTAGE:", FMS, C["dim"]),
+            2,
+            2,
+        )
+        layout.addWidget(
+            self.voltage_input,
+            2,
+            3,
+        )
+        layout.addWidget(
+            label("V", FMS, C["dim"]),
+            2,
+            4,
+        )
+
+        layout.addWidget(
+            label("REQUIRED CURRENT:", FMS, C["dim"]),
+            3,
+            2,
+        )
+        layout.addWidget(
+            self.current_input,
+            3,
+            3,
+        )
+        layout.addWidget(
+            label("A", FMS, C["dim"]),
+            3,
+            4,
+        )
+
+        self.configuration_fields = [
+            self.etr_input,
+            self.technician_input,
+            self.target_input,
+            self.voltage_input,
+            self.current_input,
+        ]
+
+        self.apply_status = label(
+            "The active test configuration is locked.",
+            FMS,
+            C["dim"],
+        )
+
+        layout.addWidget(
+            self.apply_status,
+            4,
+            0,
+            1,
+            5,
+        )
 
         root.addWidget(settings_panel)
 
-    def _build_action_buttons(self, root):
+        # Lock fields after every widget has been created.
+        self._set_configuration_locked(True)
+    
+    def _build_action_buttons(self, root) -> None:
         layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
 
-        apply_button = QPushButton("APPLY SETTINGS")
-        apply_button.setStyleSheet(button_style(self.accent))
-        apply_button.clicked.connect(self._apply_settings)
+        self.lock_button = QPushButton(
+            "EDIT TEST PARAMETERS"
+        )
+        self.lock_button.clicked.connect(
+            self._toggle_configuration_lock
+        )
+
+        self.apply_button = QPushButton(
+            "APPLY CHANGES"
+        )
+        self.apply_button.setStyleSheet(
+            button_style(self.accent)
+        )
+        self.apply_button.clicked.connect(
+            self._apply_settings
+        )
+        self.apply_button.setEnabled(False)
 
         refresh_button = QPushButton("REFRESH")
-        refresh_button.clicked.connect(self.refresh)
+        refresh_button.clicked.connect(
+            self.refresh
+        )
 
         close_button = QPushButton("CLOSE")
-        close_button.clicked.connect(self.close)
+        close_button.clicked.connect(
+            self.close
+        )
 
         layout.addStretch()
-        layout.addWidget(apply_button)
+        layout.addWidget(self.lock_button)
+        layout.addWidget(self.apply_button)
         layout.addWidget(refresh_button)
         layout.addWidget(close_button)
-        layout.addStretch()
 
         root.addLayout(layout)
 
-    def _apply_settings(self):
-        etr_number = self.etr_input.text().strip()
-        technician = self.technician_input.text().strip()
 
-        if not etr_number:
-            QMessageBox.warning(self, "Missing ETR Number", "Enter an ETR Number.")
-            return
+    def _set_configuration_locked(
+        self,
+        locked: bool,
+    ) -> None:
+        self.configuration_unlocked = not locked
 
-        if not technician:
-            QMessageBox.warning(
-                self, "Missing Technician", "Enter the technician name."
+        for field in self.configuration_fields:
+            field.setReadOnly(locked)
+
+        if locked:
+            self.configuration_lock_label.setText(
+                "LOCKED"
+            )
+            self.configuration_lock_label.setStyleSheet(
+                f"color: {C['green']}; border: none;"
+            )
+
+            if hasattr(self, "lock_button"):
+                self.lock_button.setText(
+                    "EDIT TEST PARAMETERS"
+                )
+
+            if hasattr(self, "apply_button"):
+                self.apply_button.setEnabled(False)
+
+        else:
+            self.configuration_lock_label.setText(
+                "EDITING ENABLED"
+            )
+            self.configuration_lock_label.setStyleSheet(
+                f"color: {C['yellow']}; border: none;"
+            )
+
+            self.lock_button.setText(
+                "CANCEL EDITING"
+            )
+            self.apply_button.setEnabled(True)
+
+    def _toggle_configuration_lock(self) -> None:
+        if self.configuration_unlocked:
+            self._restore_configuration_fields()
+            self._set_configuration_locked(True)
+
+            self.apply_status.setText(
+                "Changes discarded. Configuration locked."
+            )
+            self.apply_status.setStyleSheet(
+                f"color: {C['dim']}; border: none;"
             )
             return
 
+        response = QMessageBox.warning(
+            self,
+            "Unlock Active Test Configuration",
+            (
+                "This test is currently active.\n\n"
+                "Editing the ETR number, technician, target hours, "
+                "required voltage, or required current will modify "
+                "the stored test record.\n\n"
+                "This action will not change the calibrated PSU "
+                "voltage/current or the physical PSU output.\n\n"
+                "Do you want to unlock the configuration?"
+            ),
+            QMessageBox.StandardButton.Yes
+            | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+
+        if response != QMessageBox.StandardButton.Yes:
+            return
+
+        self._set_configuration_locked(False)
+
+        self.apply_status.setText(
+            "Editing enabled. Review all values before applying."
+        )
+        self.apply_status.setStyleSheet(
+            f"color: {C['yellow']}; border: none;"
+        )
+
+    def _restore_configuration_fields(self) -> None:
+        self.etr_input.setText(
+            self.psu.etr_number
+        )
+
+        self.technician_input.setText(
+            self.psu.technician
+        )
+
+        self.target_input.setText(
+            f"{self.psu.target_hrs:g}"
+        )
+
+        self.voltage_input.setText(
+            f"{float(self.psu.set_voltage or 0.0):.3f}"
+        )
+
+        self.current_input.setText(
+            f"{float(self.psu.set_current or 0.0):.3f}"
+        )
+
+    def _apply_settings(self) -> None:
+        if not self.configuration_unlocked:
+            QMessageBox.information(
+                self,
+                "Configuration Locked",
+                "Unlock the configuration before making changes.",
+            )
+            return
+
+        etr_number = self.etr_input.text().strip()
+        technician = self.technician_input.text().strip()
+
         try:
-            target_hours = float(self.target_input.text())
-            voltage = float(self.voltage_input.text())
-            current = float(self.current_input.text())
+            if not etr_number:
+                raise ValueError(
+                    "ETR number cannot be empty."
+                )
+
+            if not technician or technician == "—":
+                raise ValueError(
+                    "Technician cannot be empty."
+                )
+
+            target_hours = float(
+                self.target_input.text().strip()
+            )
+
+            required_voltage = float(
+                self.voltage_input.text().strip()
+            )
+
+            required_current = float(
+                self.current_input.text().strip()
+            )
 
             if target_hours <= 0:
-                raise ValueError("Target hours must be grater than zero.")
+                raise ValueError(
+                    "Target hours must be greater than zero."
+                )
 
-            if voltage < 0:
-                raise ValueError("Voltage cannot be negative.")
+            if required_voltage < 0:
+                raise ValueError(
+                    "Required voltage cannot be negative."
+                )
 
-            if current < 0:
-                raise ValueError("Current cannot be negative.")
+            if required_current < 0:
+                raise ValueError(
+                    "Required current cannot be negative."
+                )
 
         except ValueError as error:
             QMessageBox.warning(
                 self,
-                "Invalid Settings",
+                "Invalid Test Configuration",
                 str(error),
             )
             return
 
+        response = QMessageBox.warning(
+            self,
+            "Apply Active Test Changes",
+            (
+                "The following active test configuration will be "
+                "updated:\n\n"
+                f"ETR: {etr_number}\n"
+                f"Technician: {technician}\n"
+                f"Target: {target_hours:g} h\n"
+                f"Required voltage: {required_voltage:.3f} V\n"
+                f"Required current: {required_current:.3f} A\n\n"
+                "The calibrated PSU values and physical output will "
+                "remain unchanged.\n\n"
+                "Apply these changes?"
+            ),
+            QMessageBox.StandardButton.Yes
+            | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+
+        if response != QMessageBox.StandardButton.Yes:
+            return
+
+        # Update the active test state.
         self.psu.etr_number = etr_number
         self.psu.technician = technician
         self.psu.target_hrs = target_hours
-        self.set_voltage = voltage
-        self.set_current = current
+        self.psu.set_voltage = required_voltage
+        self.psu.set_current = required_current
 
-        try:
-            psu_set_output(
-                self.psu.idx,
-                voltage,
-                current,
-            )
-
-        except Exception as error:
-            QMessageBox.critical(
-                self,
-                "PSU Communication Error",
-                f"Unable to apply the PSU test configurations: \n{error}",
-            )
-            return
-
+        # Notify the main window so the machine card and saved
+        # state are updated.
         self.on_apply(
             self.psu.idx,
             etr_number,
             technician,
             target_hours,
-            voltage,
-            current,
+            required_voltage,
+            required_current,
         )
+
+        self._set_configuration_locked(True)
 
         self.apply_status.setText(
-            f"Settings applied: {voltage:.3f} V and {current:.3f} A"
+            "Configuration updated and locked."
+        )
+        self.apply_status.setStyleSheet(
+            f"color: {C['green']}; border: none;"
         )
 
-        self.apply_status.setStyleSheet(f"color: {C['green']}; border: 0;")
-
         self.setWindowTitle(
-            f"PSU{self.psu.idx + 1}{self.psu.etr_number} Configuration and History"
+            f"PSU{self.psu.idx + 1} · "
+            f"{self.psu.etr_number} · Test Session"
         )
 
         self.refresh()
