@@ -3,6 +3,11 @@ import threading
 import csv
 import os
 
+import ipaddress
+from pathlib import Path
+
+from dotenv import dotenv_values
+
 import matplotlib.dates as mdates
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
@@ -25,6 +30,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QFormLayout,
 )
 
 from src.backend.instrument_drivers import psu_set_output, psu_set_power
@@ -69,6 +75,369 @@ def style_ax(ax):
     ax.grid(True, color=PLOT_GRID, linewidth=0.4, alpha=0.7)
 
 
+class PSUNetworkSettingsDialog(QDialog):
+    def __init__(
+        self,
+        parent,
+        env_path: Path,
+        num_psu: int,
+    ) -> None:
+        super().__init__(parent)
+
+        self.env_path = Path(env_path)
+        self.num_psu = int(num_psu)
+        self.ip_inputs: list[QLineEdit] = []
+
+        self.setWindowTitle(
+            "PSU Network Settings"
+        )
+        self.setModal(True)
+        self.setMinimumWidth(520)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(
+            18,
+            18,
+            18,
+            18,
+        )
+        root.setSpacing(14)
+
+        title_label = QLabel(
+            "SORENSEN PSU IP ADDRESSES"
+        )
+
+        description_label = QLabel(
+            "Configure the static IP address that "
+            "the HTOL application uses to connect "
+            "to each Sorensen PSU.\n\n"
+            "Leaving a field empty disables the "
+            "connection attempt for that PSU."
+        )
+        description_label.setWordWrap(True)
+
+        env_path_label = QLabel(
+            f"Configuration file: {self.env_path}"
+        )
+        env_path_label.setWordWrap(True)
+        env_path_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+
+        form = QFormLayout()
+        form.setHorizontalSpacing(16)
+        form.setVerticalSpacing(10)
+
+        configuration = dotenv_values(
+            self.env_path
+        )
+
+        for index in range(self.num_psu):
+            variable_name = (
+                f"PSU_{index + 1}_IP_ADDRESS"
+            )
+
+            current_value = str(
+                configuration.get(
+                    variable_name,
+                    "",
+                )
+                or ""
+            ).strip()
+
+            ip_input = QLineEdit(
+                current_value
+            )
+
+            ip_input.setPlaceholderText(
+                "Example: 169.254.10.10"
+            )
+
+            ip_input.setClearButtonEnabled(
+                True
+            )
+
+            self.ip_inputs.append(
+                ip_input
+            )
+
+            form.addRow(
+                f"PSU {index + 1}:",
+                ip_input,
+            )
+
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
+
+        cancel_button = QPushButton(
+            "CANCEL"
+        )
+
+        save_button = QPushButton(
+            "SAVE SETTINGS"
+        )
+
+        cancel_button.clicked.connect(
+            self.reject
+        )
+
+        save_button.clicked.connect(
+            self._save_settings
+        )
+
+        actions.addStretch()
+        actions.addWidget(cancel_button)
+        actions.addWidget(save_button)
+
+        root.addWidget(title_label)
+        root.addWidget(description_label)
+        root.addWidget(env_path_label)
+        root.addLayout(form)
+        root.addStretch()
+        root.addLayout(actions)
+
+    @staticmethod
+    def _validate_ip_address(
+        value: str,
+        psu_number: int,
+    ) -> str:
+        value = value.strip()
+
+        # An empty value means that the PSU connection
+        # is not configured.
+        if not value:
+            return ""
+
+        try:
+            address = ipaddress.IPv4Address(
+                value
+            )
+
+        except ipaddress.AddressValueError as error:
+            raise ValueError(
+                f"PSU {psu_number} has an invalid "
+                f"IPv4 address:\n\n{value}"
+            ) from error
+
+        return str(address)
+
+    def _collect_settings(
+        self,
+    ) -> dict[str, str]:
+        settings: dict[str, str] = {}
+        assigned_addresses: dict[str, int] = {}
+
+        for index, ip_input in enumerate(
+            self.ip_inputs
+        ):
+            psu_number = index + 1
+
+            ip_address = self._validate_ip_address(
+                ip_input.text(),
+                psu_number,
+            )
+
+            if ip_address:
+                previous_psu = (
+                    assigned_addresses.get(
+                        ip_address
+                    )
+                )
+
+                if previous_psu is not None:
+                    raise ValueError(
+                        f"PSU {previous_psu} and "
+                        f"PSU {psu_number} cannot use "
+                        "the same IP address:\n\n"
+                        f"{ip_address}"
+                    )
+
+                assigned_addresses[
+                    ip_address
+                ] = psu_number
+
+            variable_name = (
+                f"PSU_{psu_number}_IP_ADDRESS"
+            )
+
+            settings[variable_name] = (
+                ip_address
+            )
+
+        return settings
+
+
+    def _update_env_file(
+        self,
+        settings: dict[str, str],
+    ) -> None:
+        """Update PSU IP addresses while preserving other .env entries."""
+
+        if self.env_path.exists():
+            original_text = self.env_path.read_text(
+                encoding="utf-8",
+            )
+
+            lines = original_text.splitlines()
+
+        else:
+            lines = [
+                "# ==========================================",
+                "# PSU network configuration",
+                "# ==========================================",
+                "",
+            ]
+
+        updated_variables: set[str] = set()
+        updated_lines: list[str] = []
+
+        for line in lines:
+            stripped_line = line.strip()
+            matched_variable = None
+
+            for variable_name in settings:
+                if stripped_line.startswith(
+                    f"{variable_name}="
+                ):
+                    matched_variable = variable_name
+                    break
+
+            if matched_variable is None:
+                updated_lines.append(line)
+                continue
+
+            updated_lines.append(
+                f"{matched_variable}="
+                f"{settings[matched_variable]}"
+            )
+
+            updated_variables.add(
+                matched_variable
+            )
+
+        missing_variables = [
+            variable_name
+            for variable_name in settings
+            if variable_name not in updated_variables
+        ]
+
+        if missing_variables:
+            if (
+                updated_lines
+                and updated_lines[-1].strip()
+            ):
+                updated_lines.append("")
+
+            for variable_name in missing_variables:
+                updated_lines.append(
+                    f"{variable_name}="
+                    f"{settings[variable_name]}"
+                )
+
+        final_text = (
+            "\n".join(updated_lines)
+            + "\n"
+        )
+
+        self.env_path.write_text(
+            final_text,
+            encoding="utf-8",
+        )
+
+
+    def _save_settings(self) -> None:
+        try:
+            settings = (
+                self._collect_settings()
+            )
+
+        except ValueError as error:
+            QMessageBox.warning(
+                self,
+                "Invalid PSU Address",
+                str(error),
+            )
+            return
+
+        assigned_count = sum(
+            1
+            for value in settings.values()
+            if value
+        )
+
+        confirmation = QMessageBox.question(
+            self,
+            "Save PSU Network Settings",
+            (
+                "Save the following PSU connection "
+                "addresses to .env?\n\n"
+                + "\n".join(
+                    (
+                        variable_name.replace(
+                            "_IP_ADDRESS",
+                            "",
+                        ).replace(
+                            "_",
+                            " ",
+                        )
+                        + ": "
+                        + (
+                            value
+                            or "Not configured"
+                        )
+                    )
+                    for variable_name, value
+                    in settings.items()
+                )
+                + "\n\n"
+                + (
+                    f"{assigned_count} of "
+                    f"{self.num_psu} PSU connections "
+                    "will be configured."
+                )
+            ),
+            (
+                QMessageBox.StandardButton.Save
+                | QMessageBox.StandardButton.Cancel
+            ),
+            QMessageBox.StandardButton.Cancel,
+        )
+
+        if (
+            confirmation
+            != QMessageBox.StandardButton.Save
+        ):
+            return
+
+        try:
+            self._update_env_file(
+                settings
+            )
+
+        except OSError as error:
+            QMessageBox.critical(
+                self,
+                "Configuration Error",
+                (
+                    "Unable to update the .env "
+                    "configuration file.\n\n"
+                    f"{error}"
+                ),
+            )
+            return
+
+        QMessageBox.information(
+            self,
+            "PSU Network Settings Saved",
+            (
+                "The PSU IP addresses were saved "
+                "successfully.\n\n"
+                "Restart the HTOL application for "
+                "the new addresses to take effect."
+            ),
+        )
+
+        self.accept()
 
 class OpenFuseRecoveryDialog(QDialog):
     def __init__(

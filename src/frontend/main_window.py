@@ -34,6 +34,7 @@ from src.frontend.dialogs import (
     PSUDetailPopup,
     PSUSetupPopup,
     TestHistoryPopup,
+    PSUNetworkSettingsDialog,
 )
 from src.frontend.widgets import (
     ChamberWidget,
@@ -948,14 +949,38 @@ class HTOLMonitor(QMainWindow):
     def _open_psu_network_settings(
         self,
     ) -> None:
-        QMessageBox.information(
-            self,
-            "PSU Network Settings",
-            (
-                "The PSU network-settings dialog "
-                "will be added in the next patch."
-            ),
+        active_psus = [
+            psu
+            for psu in self.psus
+            if psu.test_active
+        ]
+
+        if active_psus:
+            active_names = ", ".join(
+                f"PSU{psu.idx + 1}"
+                for psu in active_psus
+            )
+
+            QMessageBox.warning(
+                self,
+                "Network Settings Locked",
+                (
+                    "PSU network settings cannot be "
+                    "changed while a test is active.\n\n"
+                    f"Active channels: {active_names}\n\n"
+                    "End the active tests before "
+                    "changing the connection addresses."
+                ),
+            )
+            return
+
+        dialog = PSUNetworkSettingsDialog(
+            parent=self,
+            env_path=PROJECT_DIR / ".env",
+            num_psu=NUM_PSU,
         )
+
+        self._show_dialog(dialog)
 
     def _show_dialog(self, dialog):
         self._dialogs.append(dialog)
