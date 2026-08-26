@@ -1944,167 +1944,56 @@ class CompleteTestDialog(QDialog):
         root.addLayout(button_layout)
 
     def confirm(self) -> None:
-        psu = self.psu
-        chamber = self.chamber
-
-        final_notes = (
-            self.notes
-            .toPlainText()
-            .strip()
-        )
-
-        average_current = (
-            sum(psu.current_hist)
-            / len(psu.current_hist)
-            if psu.current_hist
-            else 0.0
-        )
-
-        average_voltage = (
-            sum(psu.voltage_hist)
-            / len(psu.voltage_hist)
-            if psu.voltage_hist
-            else 0.0
-        )
-
-        average_temperature = (
-            sum(chamber.temp_hist)
-            / len(chamber.temp_hist)
-            if chamber.temp_hist
-            else 0.0
-        )
-
-        current_limit = 300
-
-        current_snapshot = list(
-            psu.current_hist
-        )[-current_limit:]
-
-        voltage_snapshot = list(
-            psu.voltage_hist
-        )[-current_limit:]
-
-        current_time_snapshot = [
-            timestamp.isoformat(
-                timespec="seconds"
-            )
-            if isinstance(
-                timestamp,
-                datetime.datetime,
-            )
-            else str(timestamp)
-            for timestamp in list(
-                psu.time_hist
-            )[-current_limit:]
-        ]
-
-        temp_snapshot = list(
-            chamber.temp_hist
-        )[-current_limit:]
-
-        temp_time_snapshot = [
-            timestamp.isoformat(
-                timespec="seconds"
-            )
-            if isinstance(
-                timestamp,
-                datetime.datetime,
-            )
-            else str(timestamp)
-            for timestamp in list(
-                chamber.time_hist
-            )[-current_limit:]
-        ]
-
-        record = {
-            "psu_idx": psu.idx,
-            "psu_label": f"PSU{psu.idx + 1}",
-            "etr_number": psu.etr_number,
-            "technician": psu.technician,
-            "started_at": (
-                psu.test_start_dt.isoformat(
-                    timespec="seconds"
-                )
-                if psu.test_start_dt
-                else None
-            ),
-            "completed_at": (
-                datetime.datetime.now().isoformat(
-                    timespec="seconds"
-                )
-            ),
-            "hours_elapsed": round(
-                psu.hours_elapsed,
-                4,
-            ),
-            "target_hrs": float(
-                psu.target_hrs
-            ),
-            "progress_pct": round(
-                psu.progress_pct,
-                2,
-            ),
-            "required_voltage": (
-                psu.set_voltage
-            ),
-            "required_current": (
-                psu.set_current
-            ),
-            "calibrated_voltage": (
-                psu.calibrated_voltage
-            ),
-            "calibrated_current": (
-                psu.calibrated_current
-            ),
-            "avg_voltage_v": round(
-                average_voltage,
-                4,
-            ),
-            "avg_current_a": round(
-                average_current,
-                4,
-            ),
-            "avg_temp_c": round(
-                average_temperature,
-                2,
-            ),
-            "notes": final_notes,
-            "current_snapshot": current_snapshot,
-            "voltage_snapshot": voltage_snapshot,
-            "temp_snapshot": temp_snapshot,
-            "current_time_snapshot": (
-                current_time_snapshot
-            ),
-            "temp_time_snapshot": (
-                temp_time_snapshot
-            ),
-        }
+        final_notes = self.notes.toPlainText().strip()
 
         try:
-            test_session_id = (
-                self.store.complete_test(record)
+            # Save the latest elapsed time, configuration,
+            # PSU status, and notes before finalizing.
+            self.psu.notes = final_notes
+
+            self.store.save_live_state(
+                [self.psu]
             )
 
-        except sqlite3.Error as error:
+            # Atomically move the ongoing test and all its
+            # measurements into permanent Test History.
+            test_session_id = (
+                self.store.finalize_live_test(
+                    psu_idx=self.psu.idx,
+                    final_notes=final_notes,
+                )
+            )
+
+        except Exception as error:
             QMessageBox.critical(
                 self,
                 "Database Error",
                 (
-                    "The test could not be saved to "
-                    f"the SQLite database.\n\n{error}"
+                    "The test could not be moved into "
+                    "Test History.\n\n"
+                    f"{error}"
                 ),
             )
             return
 
-        record["id"] = test_session_id
+        record = {
+            "id": test_session_id,
+            "psu_idx": self.psu.idx,
+            "psu_label": f"PSU{self.psu.idx + 1}",
+            "etr_number": self.psu.etr_number,
+            "technician": self.psu.technician,
+            "hours_elapsed": self.psu.hours_elapsed,
+            "target_hrs": self.psu.target_hrs,
+            "notes": final_notes,
+        }
 
         self.on_complete(
-            psu.idx,
+            self.psu.idx,
             record,
         )
 
         self.accept()
-
+   
 class TestHistoryPopup(QDialog):
     def __init__(self, parent, store):
         super().__init__(parent)

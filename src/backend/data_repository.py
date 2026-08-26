@@ -598,13 +598,156 @@ class DataRepository:
                     )
 
             except Exception:
-                # Put the samples back if the database write fails.
+                # Restore rows so they are not lost.
                 self._measurement_buffer[0:0] = (
                     pending_rows
                 )
                 raise
 
         return len(pending_rows)
+
+
+    def finalize_live_test(
+        self,
+        psu_idx: int,
+        final_notes: str,
+    ) -> int:
+        """Move an ongoing test and all measurements into Test History."""
+
+        # Write any remaining buffered measurements first.
+        self.flush_measurement_buffer()
+
+        completed_at_ms = int(
+            datetime.datetime.now().timestamp() * 1000
+        )
+
+        with self._write_lock:
+            with self._connection() as connection:
+                live_session = connection.execute(
+                    """
+                    SELECT *
+                    FROM live_test_sessions
+                    WHERE psu_idx = ?
+                    """,
+                    (int(psu_idx),),
+                ).fetchone()
+
+                if live_session is None:
+                    raise ValueError(
+                        f"No ongoing test exists for PSU{psu_idx + 1}."
+                    )
+
+                averages = connection.execute(
+                    """
+                    SELECT
+                        AVG(voltage_v) AS avg_voltage_v,
+                        AVG(current_a) AS avg_current_a,
+                        AVG(chamber_temp_c) AS avg_temp_c
+                    FROM live_test_measurements
+                    WHERE psu_idx = ?
+                    """,
+                    (int(psu_idx),),
+                ).fetchone()
+
+                cursor = connection.execute(
+                    """
+                    INSERT INTO test_sessions (
+                        psu_idx,
+                        psu_label,
+                        etr_number,
+                        technician,
+                        started_at_ms,
+                        completed_at_ms,
+                        target_hrs,
+                        hours_elapsed,
+                        progress_pct,
+                        required_voltage,
+                        required_current,
+                        calibrated_voltage,
+                        calibrated_current,
+                        avg_voltage_v,
+                        avg_current_a,
+                        avg_temp_c,
+                        final_notes,
+                        created_at_ms
+                    )
+                    VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    )
+                    """,
+                    (
+                        live_session["psu_idx"],
+                        live_session["psu_label"],
+                        live_session["etr_number"],
+                        live_session["technician"],
+                        live_session["started_at_ms"],
+                        completed_at_ms,
+                        live_session["target_hrs"],
+                        live_session["hours_elapsed"],
+                        live_session["progress_pct"],
+                        live_session["required_voltage"],
+                        live_session["required_current"],
+                        live_session["calibrated_voltage"],
+                        live_session["calibrated_current"],
+                        averages["avg_voltage_v"],
+                        averages["avg_current_a"],
+                        averages["avg_temp_c"],
+                        final_notes,
+                        completed_at_ms,
+                    ),
+                )
+
+                test_session_id = int(cursor.lastrowid)
+
+                connection.execute(
+                    """
+                    INSERT INTO test_measurements (
+                        test_session_id,
+                        measured_at_ms,
+                        voltage_v,
+                        current_a,
+                        chamber_temp_c,
+                        output_on,
+                        psu_online,
+                        psu_fault
+                    )
+                    SELECT
+                        ?,
+                        measured_at_ms,
+                        voltage_v,
+                        current_a,
+                        chamber_temp_c,
+                        output_on,
+                        psu_online,
+                        psu_fault
+                    FROM live_test_measurements
+                    WHERE psu_idx = ?
+                    ORDER BY measured_at_ms
+                    """,
+                    (
+                        test_session_id,
+                        int(psu_idx),
+                    ),
+                )
+
+                connection.execute(
+                    """
+                    DELETE FROM live_test_measurements
+                    WHERE psu_idx = ?
+                    """,
+                    (int(psu_idx),),
+                )
+
+                connection.execute(
+                    """
+                    DELETE FROM live_test_sessions
+                    WHERE psu_idx = ?
+                    """,
+                    (int(psu_idx),),
+                )
+
+                return test_session_id
 
     def get_live_measurements(
         self,
