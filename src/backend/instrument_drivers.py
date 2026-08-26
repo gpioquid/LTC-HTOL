@@ -118,7 +118,6 @@ def psu_read(idx: int) -> dict:
             "power_on": False,
             "voltage_v": 0.0,
             "current_a": 0.0,
-            "fault": False,
         }
 
     if not 0 <= idx < NUM_PSU:
@@ -134,7 +133,6 @@ def psu_read(idx: int) -> dict:
             "power_on": False,
             "voltage_v": 0.0,
             "current_a": 0.0,
-            "fault": False,
         }
 
     psu_lock = _psu_locks[idx]
@@ -147,7 +145,6 @@ def psu_read(idx: int) -> dict:
                     "power_on": False,
                     "voltage_v": 0.0,
                     "current_a": 0.0,
-                    "fault": False,
                 }
 
             voltage = float(
@@ -167,7 +164,6 @@ def psu_read(idx: int) -> dict:
             "power_on": voltage > 0.01,
             "voltage_v": round(voltage, 3),
             "current_a": round(current, 3),
-            "fault": False,
         }
 
     except (pyvisa.Error, ValueError) as error:
@@ -182,7 +178,6 @@ def psu_read(idx: int) -> dict:
             "power_on": False,
             "voltage_v": 0.0,
             "current_a": 0.0,
-            "fault": not _psu_driver_closing,
         }
 
 def psu_set_output(
@@ -230,34 +225,152 @@ def psu_set_output(
         ) from error
 
 
-def psu_set_power(idx: int, on: bool) -> bool:
-    """Send the output ON or OFF command to one PSU."""
+def psu_set_power(
+    idx: int,
+    on: bool,
+    target_voltage: float | None = None,
+    target_current: float | None = None,
+    ramp_seconds: float = 4.0,
+) -> bool:
+    """
+    Turn the PSU output ON or OFF.
+
+    ON:
+        Apply the final current limit, enable at 0 V,
+        then use the native Sorensen voltage ramp.
+
+    OFF:
+        Abort any voltage ramp and disable immediately.
+    """
 
     if not 0 <= idx < NUM_PSU:
-        raise IndexError(f"Invalid PSU index: {idx}")
+        raise IndexError(
+            f"Invalid PSU index: {idx}"
+        )
 
     instrument = _psu_connections[idx]
 
     if instrument is None:
-        raise RuntimeError(f"PSU {idx + 1} is not connected")
+        raise RuntimeError(
+            f"PSU {idx + 1} is not connected."
+        )
 
-    requested_state = 1 if on else 0
     psu_lock = _psu_locks[idx]
 
     try:
         with psu_lock:
-            instrument.write(f"OUTPut:STATe {requested_state}")
+            if not on:
+                instrument.write(
+                    "SOURce:VOLTage:RAMP:ABORt"
+                )
+                instrument.write(
+                    "OUTPut:STATe 0"
+                )
 
-        print(f"PSU {idx + 1}: output command sent: {'ON' if on else 'OFF'}")
+                print(
+                    f"PSU {idx + 1}: output OFF"
+                )
 
-        return on
+                return False
 
-    except pyvisa.errors.VisaIOError as error:
+            if target_voltage is None:
+                raise ValueError(
+                    "Target voltage is required "
+                    "when enabling PSU output."
+                )
+
+            if target_current is None:
+                raise ValueError(
+                    "Target current is required "
+                    "when enabling PSU output."
+                )
+
+            voltage = float(target_voltage)
+            current = float(target_current)
+            duration = float(ramp_seconds)
+
+            if voltage < 0:
+                raise ValueError(
+                    "Target voltage cannot be negative."
+                )
+
+            if current < 0:
+                raise ValueError(
+                    "Target current cannot be negative."
+                )
+
+            if not 0.1 <= duration <= 99.0:
+                raise ValueError(
+                    "Ramp duration must be between "
+                    "0.1 and 99.0 seconds."
+                )
+
+            # Cancel any old voltage-ramp configuration.
+            instrument.write(
+                "SOURce:VOLTage:RAMP:ABORt"
+            )
+
+            # Establish a controlled starting condition.
+            instrument.write(
+                "OUTPut:STATe 0"
+            )
+
+            # Apply the final current limit before output ON.
+            instrument.write(
+                f"SOURce:CURRent {current:.3f}"
+            )
+
+            # Set the starting voltage for the ramp.
+            instrument.write(
+                "SOURce:VOLTage 0"
+            )
+
+            # Enable output at zero programmed voltage.
+            instrument.write(
+                "OUTPut:STATe 1"
+            )
+
+            # Start the native voltage ramp.
+            instrument.write(
+                "SOURce:VOLTage:RAMP "
+                f"{voltage:.3f} "
+                f"{duration:.1f}"
+            )
+
+        print(
+            f"PSU {idx + 1}: output ON with "
+            f"native voltage ramp, "
+            f"0.000 V to {voltage:.3f} V in "
+            f"{duration:.1f} s, "
+            f"current limit {current:.3f} A"
+        )
+
+        return True
+
+    except (
+        pyvisa.errors.VisaIOError,
+        ValueError,
+        TypeError,
+    ) as error:
+        if on:
+            try:
+                with psu_lock:
+                    instrument.write(
+                        "SOURce:VOLTage:RAMP:ABORt"
+                    )
+                    instrument.write(
+                        "OUTPut:STATe 0"
+                    )
+
+            except pyvisa.errors.VisaIOError:
+                pass
+
         raise RuntimeError(
-            f"Unable to control PSU {idx + 1} output: {error}"
+            f"Unable to control PSU {idx + 1} "
+            f"output: {error}"
         ) from error
 
-
+    
 def thermocouple_read() -> dict:
     """TODO: Replace with serial read from MCU."""
     return {

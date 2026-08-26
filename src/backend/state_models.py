@@ -24,7 +24,6 @@ class PSUState:
 
         self.online = False
         self.power_on = False
-        self.fault = False
 
         self.voltage_v = 0  # readback
         self.current_a = 0  # readback
@@ -58,8 +57,6 @@ class PSUState:
     def status_str(self):
         if not self.test_active:
             return "IDLE"
-        if self.fault:
-            return "FAULT"
         if not self.online:
             return "OFFLINE"
         if self.power_on:
@@ -72,7 +69,6 @@ class PSUState:
             "ON": C["green"],
             "STANDBY": C["yellow"],
             "OFFLINE": C["red"],
-            "FAULT": C["red"],
             "IDLE": C["dim"],
         }.get(self.status_str, C["dim"])
 

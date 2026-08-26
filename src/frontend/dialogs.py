@@ -1,6 +1,7 @@
 import datetime
 import threading
 import csv
+import os
 
 import matplotlib.dates as mdates
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
@@ -39,7 +40,12 @@ from src.frontend.ui_styles import (
     button_style,
     font,
 )
-
+PSU_OUTPUT_RAMP_SECONDS = float(
+    os.getenv(
+        "PSU_OUTPUT_RAMP_SECONDS",
+        "4.0",
+    )
+)
 
 def panel():
     w = QFrame()
@@ -586,10 +592,24 @@ class PSUCalibrationPopup(QDialog):
         try:
             if self.ui_test_mode:
                 actual_state = requested_state
+
+            elif requested_state:
+                actual_state = psu_set_power(
+                    self.psu.idx,
+                    True,
+                    target_voltage=float(
+                        self.psu.calibrated_voltage
+                    ),
+                    target_current=float(
+                        self.psu.calibrated_current
+                    ),
+                    ramp_seconds=PSU_OUTPUT_RAMP_SECONDS,
+                )
+
             else:
                 actual_state = psu_set_power(
                     self.psu.idx,
-                    requested_state,
+                    False,
                 )
 
         except Exception as error:
@@ -673,9 +693,13 @@ class PSUCalibrationPopup(QDialog):
                 )
 
                 # START TEST must always turn the output back ON.
+
                 actual_power_state = psu_set_power(
                     self.psu.idx,
                     True,
+                    target_voltage=calibrated_voltage,
+                    target_current=calibrated_current,
+                    ramp_seconds=PSU_OUTPUT_RAMP_SECONDS,
                 )
 
                 if not actual_power_state:
