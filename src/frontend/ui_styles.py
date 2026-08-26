@@ -286,11 +286,6 @@ QFrame#machineCard {{
         border: 1px solid {C["red"]};
     }}
 
-    QFrame#machineCard[state="fault"] {{
-        background: #211217;
-        border: 2px solid {C["red"]};
-    }}
-
     QFrame#machineCard {{
         background: #1f242b;
         border: 1px solid #303844;
@@ -312,9 +307,7 @@ QFrame#machineCard[state="paused"] QFrame#machineCardContent {{
     border: 2px solid #f5c451;
 }}
 
-QFrame#machineCard[state="fault"] QFrame#machineCardContent {{
-    border: 2px solid #ff5d6c;
-}}
+
 
 QFrame#machineCard[state="offline"] QFrame#machineCardContent {{
     border: 2px solid #708598;
