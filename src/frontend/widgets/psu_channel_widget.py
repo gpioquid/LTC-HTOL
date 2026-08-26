@@ -442,8 +442,6 @@ class PSUChannelWidget(QFrame):
         self.update()
 
     def _state_name(self, psu):
-        if psu.fault:
-            return "fault"
 
         if not psu.online:
             return "offline"

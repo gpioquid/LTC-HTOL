@@ -43,7 +43,7 @@ class HeaderWidget(QFrame):
 
         title_layout.addWidget(
             create_label(
-                "■ HTOL MONITOR",
+                "HTOL MONITOR",
                 ("Consolas", 20, True),
                 C["cyan"],
             )
@@ -71,12 +71,6 @@ class HeaderWidget(QFrame):
         )
         self.active_label.setObjectName("headerMetric")
 
-        self.fault_label = create_label(
-            "FAULTS  0",
-            FMB,
-            C["dim"],
-        )
-        self.fault_label.setObjectName("headerMetric")
 
         self.clock_label = create_label(
             "",
@@ -89,7 +83,6 @@ class HeaderWidget(QFrame):
         layout.addWidget(history_button)
         layout.addSpacing(8)
         layout.addWidget(self.active_label)
-        layout.addWidget(self.fault_label)
         layout.addSpacing(8)
         layout.addWidget(self.clock_label)
         # Display the date and time immediately.
@@ -123,9 +116,3 @@ class HeaderWidget(QFrame):
     ):
         self.active_label.setText(f"ACTIVE  {active_count}/{total_count}")
 
-    def set_fault_count(self, fault_count):
-        self.fault_label.setText(f"FAULTS  {fault_count}")
-
-        color = C["red"] if fault_count else C["dim"]
-
-        self.fault_label.setStyleSheet(f"color: {color};")

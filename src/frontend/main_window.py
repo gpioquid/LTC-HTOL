@@ -213,9 +213,6 @@ class HTOLMonitor(QMainWindow):
             psu.online = bool(
                 saved_state.get("online", False)
             )
-            psu.fault = bool(
-                saved_state.get("fault", False)
-            )
 
             restored_channels.append(
                 f"PSU{index + 1}/{psu.etr_number}"
@@ -594,7 +591,6 @@ class HTOLMonitor(QMainWindow):
         psu.test_active = True
         psu.online = True
         psu.power_on = True
-        psu.fault = False
 
         channel = (
             self.psu_panel_widget
@@ -956,7 +952,6 @@ class HTOLMonitor(QMainWindow):
             psu.power_on = reading["power_on"]
             psu.voltage_v = reading["voltage_v"]
             psu.current_a = reading["current_a"]
-            psu.fault = reading["fault"]
 
             psu.current_hist.append(
                 psu.current_a
@@ -1038,13 +1033,12 @@ class HTOLMonitor(QMainWindow):
     # ==========================================================
 
     def update_ui(self, now):
-        active_count, fault_count = self.psu_panel_widget.update_channels(self.psus)
+        active_count= self.psu_panel_widget.update_channels(self.psus)
 
         self.header_widget.set_active_count(
             active_count,
             NUM_PSU,
         )
-        self.header_widget.set_fault_count(fault_count)
 
         self.chamber_widget.update_state(
             self.chamber,
