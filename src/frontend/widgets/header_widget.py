@@ -22,6 +22,7 @@ from src.frontend.widgets.common import (
 
 class HeaderWidget(QFrame):
     history_requested = Signal()
+    psu_network_requested = Signal()
 
     def __init__(self, num_psu, parent=None):
         super().__init__(parent)
@@ -64,6 +65,23 @@ class HeaderWidget(QFrame):
         history_button.setStyleSheet(button_style(C["purple"]))
         history_button.clicked.connect(self.history_requested.emit)
 
+        network_button = QPushButton(
+            "PSU NETWORK SETTINGS"
+        )
+
+        network_button.setToolTip(
+            "View or edit the configured "
+            "Sorensen PSU IP addresses"
+        )
+
+        network_button.setStyleSheet(
+            button_style(C["cyan"])
+        )
+
+        network_button.clicked.connect(
+            self.psu_network_requested.emit
+        )
+
         self.active_label = create_label(
             f"ACTIVE  0/{num_psu}",
             FMB,
@@ -81,6 +99,7 @@ class HeaderWidget(QFrame):
         self.clock_label.setMinimumWidth(185)
 
         layout.addWidget(history_button)
+        layout.addWidget(network_button)
         layout.addSpacing(8)
         layout.addWidget(self.active_label)
         layout.addSpacing(8)

@@ -459,6 +459,10 @@ class HTOLMonitor(QMainWindow):
         # Header
         self.header_widget.history_requested.connect(self._open_history)
 
+        self.header_widget.psu_network_requested.connect(
+            self._open_psu_network_settings
+        )
+
         # PSU actions
         self.psu_panel_widget.test_toggled.connect(self._toggle_test)
         self.psu_panel_widget.control_requested.connect(self._open_control)
@@ -940,6 +944,18 @@ class HTOLMonitor(QMainWindow):
         )
 
         self._show_dialog(dialog)
+
+    def _open_psu_network_settings(
+        self,
+    ) -> None:
+        QMessageBox.information(
+            self,
+            "PSU Network Settings",
+            (
+                "The PSU network-settings dialog "
+                "will be added in the next patch."
+            ),
+        )
 
     def _show_dialog(self, dialog):
         self._dialogs.append(dialog)
