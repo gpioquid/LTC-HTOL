@@ -1,4 +1,6 @@
-from PySide6.QtCore import Signal
+import datetime
+
+from PySide6.QtCore import Signal, QTimer
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -15,6 +17,7 @@ from src.frontend.ui_styles import (
 from src.frontend.widgets.common import (
     create_label,
 )
+
 
 
 class HeaderWidget(QFrame):
@@ -47,7 +50,7 @@ class HeaderWidget(QFrame):
         )
         title_layout.addWidget(
             create_label(
-                "HIGH TEMPERATURE OPERATING LIFE TEST  ·  CONTINUOUS MONITOR  ·  v3.0",
+                "LTC HIGH TEMPERATURE OPERATING LIFE TEST CONTROL SYSTEM",
                 FMS,
                 C["dim"],
             )
@@ -76,10 +79,12 @@ class HeaderWidget(QFrame):
         self.fault_label.setObjectName("headerMetric")
 
         self.clock_label = create_label(
-            "--:--:--",
-            ("Consolas", 16, True),
+            "",
+            ("Consolas", 14, True),
             C["text"],
         )
+        self.clock_label.setObjectName("headerClock")
+        self.clock_label.setMinimumWidth(185)
 
         layout.addWidget(history_button)
         layout.addSpacing(8)
@@ -87,9 +92,29 @@ class HeaderWidget(QFrame):
         layout.addWidget(self.fault_label)
         layout.addSpacing(8)
         layout.addWidget(self.clock_label)
+        # Display the date and time immediately.
+        self._update_clock()
 
-    def set_clock(self, value):
-        self.clock_label.setText(value)
+        # Continue updating once per second.
+        self.clock_timer = QTimer(self)
+        self.clock_timer.setInterval(1000)
+        self.clock_timer.timeout.connect(
+            self._update_clock
+        )
+        self.clock_timer.start()
+
+
+
+    def _update_clock(self) -> None:
+        current_datetime = (
+            datetime.datetime.now().strftime(
+                "%Y-%m-%d  %H:%M:%S"
+            )
+        )
+
+        self.clock_label.setText(
+            current_datetime
+        )
 
     def set_active_count(
         self,
