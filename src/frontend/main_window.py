@@ -29,6 +29,7 @@ from src.backend.state_models import (
 )
 from src.frontend.dialogs import (
     CompleteTestDialog,
+    OpenFuseRecoveryDialog,
     PSUCalibrationPopup,
     PSUDetailPopup,
     PSUSetupPopup,
@@ -59,12 +60,28 @@ NUM_PSU = int(os.environ["NUM_PSU"])
 POLL_MS = int(os.environ["POLL_MS"])
 AUTO_SAVE_INTERVAL = int(os.environ["AUTO_SAVE_INTERVAL"])
 
-_data_file = Path(os.environ["DATA_FILE"])
+_database_file = Path(
+    os.getenv(
+        "SQLITE_DATABASE_PATH",
+        "data/htol_monitor.db",
+    )
+)
 
-if not _data_file.is_absolute():
-    _data_file = PROJECT_DIR / _data_file
+if not _database_file.is_absolute():
+    _database_file = (
+        PROJECT_DIR / _database_file
+    )
 
-DATA_FILE = str(_data_file.resolve())
+DATABASE_FILE = str(
+    _database_file.resolve()
+)
+
+PSU_OUTPUT_RAMP_SECONDS = float(
+    os.getenv(
+        "PSU_OUTPUT_RAMP_SECONDS",
+        "4.0",
+    )
+)
 
 DB_SAMPLE_INTERVAL_SECONDS = float(
     os.getenv(
@@ -369,7 +386,7 @@ class HTOLMonitor(QMainWindow):
         # Bottom status bar
         # ----------------------------------------------------------
 
-        self.status_bar_widget = StatusBarWidget(DATA_FILE)
+        self.status_bar_widget = StatusBarWidget(DATABASE_FILE)
         self.status_bar_widget.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Fixed,
@@ -434,7 +451,7 @@ class HTOLMonitor(QMainWindow):
         root_layout.addWidget(splitter, 1)
 
         # Bottom status bar
-        self.status_bar_widget = StatusBarWidget(DATA_FILE)
+        self.status_bar_widget = StatusBarWidget(DATABASE_FILE)
 
         root_layout.addWidget(self.status_bar_widget)
 
@@ -460,7 +477,9 @@ class HTOLMonitor(QMainWindow):
 
     def _initialize_log(self):
         self._log("HTOL Monitor v3.0 initialized. Continuous monitoring active.")
-        self._log(f"Data file: {DATA_FILE}")
+        self._log(
+                f"Database: {DATABASE_FILE}"
+            )
 
         if self._restore_message:
             self._log(self._restore_message)
@@ -1270,25 +1289,22 @@ class HTOLMonitor(QMainWindow):
         detected_at: datetime.datetime,
     ) -> None:
         """
-        Immediately disable the PSU and archive the interrupted
-        test after a confirmed open-fuse condition.
+        Immediately disable the PSU after a confirmed open-fuse
+        condition, but preserve the live test for recovery.
 
         This method runs in the polling worker thread.
         """
 
         index = psu.idx
+        shutdown_error = None
 
-        self._log_open_fuse_to_terminal(
-            index=index,
-            measured_current=measured_current,
+        print(
+            f"PSU {index + 1}: OPEN FUSE DETECTED, "
+            f"measured current="
+            f"{measured_current * 1000:.3f} mA"
         )
 
-        shutdown_error = None
-        test_session_id = None
-
         try:
-            # Abort any active current ramp and turn the
-            # physical PSU output OFF immediately.
             psu_set_power(
                 index,
                 False,
@@ -1302,67 +1318,57 @@ class HTOLMonitor(QMainWindow):
                 f"could not be confirmed: {error}"
             )
 
-        # Update runtime state immediately so another polling
-        # cycle cannot treat the channel as actively testing.
+        # Keep test_active True so the live database session
+        # remains recoverable and can be continued.
         psu.power_on = False
 
-        final_notes = (
-            "TEST AUTOMATICALLY STOPPED: OPEN FUSE DETECTED. "
+        event_note = (
+            "OPEN FUSE DETECTED. "
             f"Measured current remained within "
-            f"+/-{OPEN_FUSE_CURRENT_THRESHOLD_A * 1000:.0f} mA "
+            f"+/-"
+            f"{OPEN_FUSE_CURRENT_THRESHOLD_A * 1000:.0f} mA "
             f"for {OPEN_FUSE_CONSECUTIVE_POLLS} consecutive "
             "polling cycles. "
             f"Detected at "
             f"{detected_at.strftime('%Y-%m-%d %H:%M:%S')}. "
-            f"Final measured current: "
-            f"{measured_current * 1000:.3f} mA."
+            f"Measured current: "
+            f"{measured_current * 1000:.3f} mA. "
+            "PSU output disabled while waiting for operator action."
         )
 
-        if shutdown_error is not None:
-            final_notes += (
-                " Warning: physical PSU output shutdown "
-                f"could not be confirmed. {shutdown_error}"
+        if psu.notes:
+            psu.notes = (
+                f"{psu.notes}\n\n{event_note}"
+            )
+        else:
+            psu.notes = event_note
+
+        if shutdown_error:
+            psu.notes += (
+                "\nWarning: physical output shutdown "
+                "could not be confirmed: "
+                f"{shutdown_error}"
             )
 
         try:
-            # Save the latest session values before moving
-            # the test into permanent history.
+            # Preserve the latest interrupted state.
             self.store.save_live_state(
                 self.psus
             )
 
-            # Write measurements still waiting in RAM.
             self.store.flush_measurement_buffer()
-
-            # Move the interrupted live test into Test History.
-            test_session_id = (
-                self.store.finalize_live_test(
-                    psu_idx=index,
-                    final_notes=final_notes,
-                )
-            )
 
         except Exception as error:
             print(
-                f"PSU {index + 1}: unable to archive "
-                f"the open-fuse test: {error}"
-            )
-
-            final_notes += (
-                " Database archival failed: "
-                f"{error}"
+                f"PSU {index + 1}: unable to save "
+                f"the interrupted live test: {error}"
             )
 
         event_data = {
             "psu_idx": index,
-            "test_session_id": test_session_id,
             "etr_number": psu.etr_number,
-            "technician": psu.technician,
-            "hours_elapsed": psu.hours_elapsed,
-            "target_hrs": psu.target_hrs,
             "measured_current": measured_current,
             "detected_at": detected_at,
-            "notes": final_notes,
             "shutdown_error": shutdown_error,
         }
 
@@ -1372,8 +1378,6 @@ class HTOLMonitor(QMainWindow):
             )
 
         except RuntimeError:
-            # The application may be closing while the worker
-            # is finishing.
             if not self._closing:
                 raise
 
@@ -1382,9 +1386,7 @@ class HTOLMonitor(QMainWindow):
         event_data: dict,
     ) -> None:
         """
-        Update the UI after open-fuse shutdown.
-
-        This method runs on the main Qt UI thread.
+        Open the recovery dialog on the Qt UI thread.
         """
 
         index = int(
@@ -1397,90 +1399,124 @@ class HTOLMonitor(QMainWindow):
             event_data["measured_current"]
         )
 
-        # Return the channel to idle.
-        psu.test_active = False
-        psu.calibration_active = False
-        psu.calibration_complete = False
-        psu.test_start_dt = None
         psu.power_on = False
-        psu.hours_elapsed = 0.0
-        psu.last_db_sample_dt = None
-
-        psu.calibrated_voltage = None
-        psu.calibrated_current = None
-
-        # Reset detector state for the next test.
-        self._open_fuse_low_current_counts[index] = 0
-        self._open_fuse_monitor_started_at[index] = None
-        self._open_fuse_handling.discard(index)
 
         channel = (
             self.psu_panel_widget
             .channel_widgets[index]
         )
-
         channel.update_state(psu)
 
         self._log(
             f"OPEN FUSE DETECTED  "
             f"PSU{index + 1}  "
-            f"ETR:{event_data.get('etr_number', '—')}  "
+            f"ETR:{psu.etr_number}  "
             f"Current:"
             f"{measured_current * 1000:.3f} mA  "
-            "OUTPUT OFF  TEST STOPPED"
+            "OUTPUT OFF  WAITING FOR OPERATOR"
         )
 
-        test_session_id = event_data.get(
-            "test_session_id"
-        )
-
-        if test_session_id is None:
-            history_message = (
-                "The test could not be archived into "
-                "Test History. Check the terminal and "
-                "database logs."
-            )
-        else:
-            history_message = (
-                "The interrupted test was archived in "
-                "Test History."
-            )
-
-        shutdown_error = event_data.get(
-            "shutdown_error"
-        )
-
-        if shutdown_error:
-            shutdown_message = (
-                "\n\nWarning: physical output shutdown "
-                "could not be confirmed:\n"
-                f"{shutdown_error}"
-            )
-        else:
-            shutdown_message = (
-                "\n\nThe PSU output was turned OFF."
-            )
-
-        QMessageBox.critical(
-            self,
-            "Open Fuse Detected",
-            (
-                f"PSU {index + 1} measured approximately "
-                "zero current during an active test.\n\n"
-                f"Measured current: "
-                f"{measured_current * 1000:.3f} mA\n"
-                f"Threshold: "
-                f"+/-"
-                f"{OPEN_FUSE_CURRENT_THRESHOLD_A * 1000:.0f} mA\n"
-                f"Confirmation: "
-                f"{OPEN_FUSE_CONSECUTIVE_POLLS} "
-                "consecutive polls"
-                f"{shutdown_message}\n\n"
-                f"{history_message}\n\n"
-                "The machine has returned to IDLE."
+        dialog = OpenFuseRecoveryDialog(
+            parent=self,
+            psu=psu,
+            measured_current=measured_current,
+            on_continue=(
+                self._continue_after_open_fuse
             ),
+            on_end_test=self._complete_test,
         )
 
+        self._show_dialog(dialog)
+
+    def _continue_after_open_fuse(
+        self,
+        index: int,
+    ) -> None:
+        """
+        Resume an interrupted test after operator acknowledgement.
+
+        The existing ramp-enabled psu_set_power() is used so the
+        PSU never turns on abruptly.
+        """
+
+        psu = self.psus[index]
+
+        if not psu.test_active:
+            raise RuntimeError(
+                "The interrupted test is no longer active."
+            )
+
+        if (
+            psu.calibrated_voltage is None
+            or psu.calibrated_current is None
+        ):
+            raise RuntimeError(
+                "The calibrated voltage or current "
+                "is no longer available."
+            )
+
+        if UI_TEST_MODE:
+            actual_power_state = True
+
+            psu.voltage_v = float(
+                psu.calibrated_voltage
+            )
+            psu.current_a = float(
+                psu.calibrated_current
+            )
+
+        else:
+            actual_power_state = psu_set_power(
+                index,
+                True,
+                target_voltage=float(
+                    psu.calibrated_voltage
+                ),
+                target_current=float(
+                    psu.calibrated_current
+                ),
+                ramp_seconds=(
+                    PSU_OUTPUT_RAMP_SECONDS
+                ),
+            )
+
+        if not actual_power_state:
+            raise RuntimeError(
+                "The PSU did not confirm that "
+                "the output is ON."
+            )
+
+        psu.power_on = True
+
+        # Restart the grace period so the current ramp itself
+        # cannot retrigger the open-fuse detector.
+        restart_time = datetime.datetime.now()
+
+        self._open_fuse_low_current_counts[index] = 0
+
+        self._open_fuse_monitor_started_at[index] = (
+            restart_time
+        )
+
+        self._open_fuse_handling.discard(index)
+
+        self.store.save_live_state(
+            self.psus
+        )
+
+        channel = (
+            self.psu_panel_widget
+            .channel_widgets[index]
+        )
+        channel.update_state(psu)
+
+        self._log(
+            f"TEST CONTINUED  "
+            f"PSU{index + 1}  "
+            f"ETR:{psu.etr_number}  "
+            "OPEN FUSE CONDITION CLEARED  "
+            "OUTPUT RAMPED ON"
+        )
 
     @staticmethod
     def _log_open_fuse_to_terminal(

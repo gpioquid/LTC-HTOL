@@ -8,6 +8,7 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
+    QCheckBox,
     QButtonGroup,
     QFileDialog,
     QDialog,
@@ -66,6 +67,145 @@ def style_ax(ax):
     [s.set_color(PLOT_GRID) for s in ax.spines.values()]
     ax.tick_params(colors=PLOT_TEXT, labelsize=7)
     ax.grid(True, color=PLOT_GRID, linewidth=0.4, alpha=0.7)
+
+
+
+class OpenFuseRecoveryDialog(QDialog):
+    def __init__(
+        self,
+        parent,
+        psu,
+        measured_current: float,
+        on_continue,
+        on_end_test,
+    ) -> None:
+        super().__init__(parent)
+
+        self.psu = psu
+        self.on_continue = on_continue
+        self.on_end_test = on_end_test
+
+        self.setWindowTitle(
+            f"Open Fuse Detected - PSU{psu.idx + 1}"
+        )
+
+        self.setModal(True)
+        self.setMinimumWidth(520)
+
+        # Do not allow the window close button to silently
+        # dismiss a safety interlock.
+        self.setWindowFlag(
+            Qt.WindowType.WindowCloseButtonHint,
+            False,
+        )
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(
+            18,
+            18,
+            18,
+            18,
+        )
+        root.setSpacing(14)
+
+        title_label = QLabel(
+            f"OPEN FUSE DETECTED ON PSU{psu.idx + 1}"
+        )
+        title_label.setObjectName(
+            "openFuseDialogTitle"
+        )
+
+        message_label = QLabel(
+            "The measured current remained within the "
+            "configured open-fuse threshold during an "
+            "active test.\n\n"
+            f"Measured current: "
+            f"{measured_current * 1000:.3f} mA\n"
+            f"ETR number: {psu.etr_number}\n\n"
+            "The PSU output has been turned OFF. "
+            "Inspect the fuse, DUT, fixture, wiring, "
+            "and load before continuing."
+        )
+        message_label.setWordWrap(True)
+
+        self.acknowledgement = QCheckBox(
+            "I inspected the setup and replaced or "
+            "verified the fuse."
+        )
+
+        self.continue_button = QPushButton(
+            "CONTINUE TESTING"
+        )
+        self.continue_button.setEnabled(False)
+
+        self.end_test_button = QPushButton(
+            "END TEST"
+        )
+
+        self.acknowledgement.toggled.connect(
+            self.continue_button.setEnabled
+        )
+
+        self.continue_button.clicked.connect(
+            self._continue_testing
+        )
+
+        self.end_test_button.clicked.connect(
+            self._end_test
+        )
+
+        actions = QHBoxLayout()
+        actions.addStretch()
+        actions.addWidget(
+            self.end_test_button
+        )
+        actions.addWidget(
+            self.continue_button
+        )
+
+        root.addWidget(title_label)
+        root.addWidget(message_label)
+        root.addWidget(
+            self.acknowledgement
+        )
+        root.addStretch()
+        root.addLayout(actions)
+
+    def _continue_testing(self) -> None:
+        if not self.acknowledgement.isChecked():
+            return
+
+        try:
+            self.on_continue(
+                self.psu.idx
+            )
+
+        except Exception as error:
+            QMessageBox.critical(
+                self,
+                "Unable to Continue Test",
+                (
+                    "The PSU output could not be "
+                    "re-enabled.\n\n"
+                    f"{error}"
+                ),
+            )
+            return
+
+        self.accept()
+
+    def _end_test(self) -> None:
+        self.reject()
+
+        self.on_end_test(
+            self.psu.idx
+        )
+
+    def reject(self) -> None:
+        # Closing this dialog never re-enables the PSU.
+        self.psu.power_on = False
+
+        super().reject()
 
 
 class PSUSetupPopup(QDialog):
