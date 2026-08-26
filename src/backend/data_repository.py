@@ -819,6 +819,64 @@ class DataRepository:
 
         return measurements
 
+    def get_test_measurements(
+        self,
+        test_session_id: int,
+    ):
+        """Return all measurements belonging to one completed test."""
+
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    measured_at_ms,
+                    voltage_v,
+                    current_a,
+                    chamber_temp_c,
+                    output_on,
+                    psu_online,
+                    psu_fault
+                FROM test_measurements
+                WHERE test_session_id = ?
+                ORDER BY measured_at_ms ASC, id ASC
+                """,
+                (int(test_session_id),),
+            ).fetchall()
+
+        measurements = []
+
+        for row in rows:
+            measured_at = (
+                datetime.datetime.fromtimestamp(
+                    row["measured_at_ms"] / 1000
+                )
+            )
+
+            measurements.append(
+                {
+                    "measured_at_ms": row[
+                        "measured_at_ms"
+                    ],
+                    "measured_at": measured_at,
+                    "voltage_v": row["voltage_v"],
+                    "current_a": row["current_a"],
+                    "chamber_temp_c": row[
+                        "chamber_temp_c"
+                    ],
+                    "output_on": bool(
+                        row["output_on"]
+                    ),
+                    "psu_online": bool(
+                        row["psu_online"]
+                    ),
+                    "psu_fault": bool(
+                        row["psu_fault"]
+                    ),
+                }
+            )
+
+        return measurements
+
     def append_event(self, event) -> int:
         """Store one application event in SQLite."""
 

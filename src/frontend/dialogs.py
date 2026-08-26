@@ -1,6 +1,6 @@
 import datetime
-import sqlite3
 import threading
+import csv
 
 import matplotlib.dates as mdates
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
@@ -8,6 +8,7 @@ from matplotlib.figure import Figure
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QFileDialog,
     QDialog,
     QFrame,
     QGridLayout,
@@ -1993,7 +1994,799 @@ class CompleteTestDialog(QDialog):
         )
 
         self.accept()
-   
+
+
+class CompletedTestDetailDialog(QDialog):
+    def __init__(
+        self,
+        parent,
+        store,
+        record: dict,
+    ):
+        super().__init__(parent)
+
+        self.store = store
+        self.record = record
+
+        psu_idx = int(
+            record.get("psu_idx", 0)
+        )
+
+        self.accent = ACCENTS[
+            psu_idx % len(ACCENTS)
+        ]
+
+        self.measurements = []
+
+        self.setWindowTitle(
+            "Completed Test History - "
+            f"{record.get('etr_number', '—')}"
+        )
+
+        self.resize(1000, 760)
+        self.setMinimumSize(800, 600)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(10, 10, 10, 10)
+        root.setSpacing(8)
+
+        self._build_header(root)
+        self._build_summary(root)
+        self._build_charts(root)
+        self._build_actions(root)
+
+        self._load_measurements()
+        self._update_charts()
+
+    def _build_header(
+        self,
+        root,
+    ) -> None:
+        header_panel = panel()
+
+        layout = QHBoxLayout(header_panel)
+        layout.setContentsMargins(
+            12,
+            8,
+            12,
+            8,
+        )
+        layout.setSpacing(8)
+
+        layout.addWidget(
+            label(
+                "◈ COMPLETED TEST",
+                FML,
+                self.accent,
+            )
+        )
+
+        layout.addWidget(
+            label(
+                str(
+                    self.record.get(
+                        "etr_number",
+                        "—",
+                    )
+                ),
+                FMB,
+                C["text"],
+            )
+        )
+
+        layout.addStretch()
+
+        layout.addWidget(
+            label(
+                str(
+                    self.record.get(
+                        "completed_at",
+                        "—",
+                    )
+                ),
+                FMS,
+                C["dim"],
+            )
+        )
+
+        root.addWidget(header_panel)
+
+    def _format_number(
+        self,
+        key: str,
+        decimals: int,
+        unit: str,
+    ) -> str:
+        value = self.record.get(key)
+
+        if value is None:
+            return "—"
+
+        try:
+            return (
+                f"{float(value):.{decimals}f} "
+                f"{unit}"
+            )
+        except (TypeError, ValueError):
+            return "—"
+
+    def _build_summary(
+        self,
+        root,
+    ) -> None:
+        summary_panel = panel()
+
+        layout = QGridLayout(summary_panel)
+        layout.setContentsMargins(
+            12,
+            10,
+            12,
+            10,
+        )
+        layout.setHorizontalSpacing(20)
+        layout.setVerticalSpacing(6)
+
+        required_parameters = (
+            f"{self._format_number('required_voltage', 3, 'V')} / "
+            f"{self._format_number('required_current', 3, 'A')}"
+        )
+
+        calibrated_parameters = (
+            f"{self._format_number('calibrated_voltage', 3, 'V')} / "
+            f"{self._format_number('calibrated_current', 3, 'A')}"
+        )
+
+        average_measurements = (
+            f"{self._format_number('avg_voltage_v', 3, 'V')} / "
+            f"{self._format_number('avg_current_a', 3, 'A')}"
+        )
+
+        summary_rows = [
+            (
+                "PSU",
+                self.record.get(
+                    "psu_label",
+                    "—",
+                ),
+            ),
+            (
+                "ETR Number",
+                self.record.get(
+                    "etr_number",
+                    "—",
+                ),
+            ),
+            (
+                "Technician",
+                self.record.get(
+                    "technician",
+                    "—",
+                ),
+            ),
+            (
+                "Started",
+                self.record.get(
+                    "started_at",
+                    "—",
+                ),
+            ),
+            (
+                "Completed",
+                self.record.get(
+                    "completed_at",
+                    "—",
+                ),
+            ),
+            (
+                "Duration",
+                self._format_number(
+                    "hours_elapsed",
+                    2,
+                    "h",
+                ),
+            ),
+            (
+                "Target",
+                self._format_number(
+                    "target_hrs",
+                    2,
+                    "h",
+                ),
+            ),
+            (
+                "Required",
+                required_parameters,
+            ),
+            (
+                "Calibrated",
+                calibrated_parameters,
+            ),
+            (
+                "Average",
+                average_measurements,
+            ),
+            (
+                "Average Chamber Temp",
+                self._format_number(
+                    "avg_temp_c",
+                    2,
+                    "°C",
+                ),
+            ),
+        ]
+
+        column_count = 2
+
+        for index, (
+            heading_text,
+            value_text,
+        ) in enumerate(summary_rows):
+            group_column = (
+                index % column_count
+            )
+            group_row = (
+                index // column_count
+            )
+
+            label_column = (
+                group_column * 2
+            )
+            value_column = (
+                label_column + 1
+            )
+
+            layout.addWidget(
+                label(
+                    f"{heading_text}:",
+                    FMS,
+                    C["dim"],
+                ),
+                group_row,
+                label_column,
+            )
+
+            value_label = label(
+                str(value_text or "—"),
+                FM,
+                C["text"],
+            )
+
+            value_label.setTextInteractionFlags(
+                Qt.TextInteractionFlag.TextSelectableByMouse
+            )
+
+            layout.addWidget(
+                value_label,
+                group_row,
+                value_column,
+            )
+
+        layout.setColumnStretch(1, 1)
+        layout.setColumnStretch(3, 1)
+
+        notes_row = (
+            len(summary_rows)
+            + column_count
+            - 1
+        ) // column_count
+
+        layout.addWidget(
+            label(
+                "FINAL NOTES:",
+                FMS,
+                C["dim"],
+            ),
+            notes_row,
+            0,
+        )
+
+        notes_label = label(
+            str(
+                self.record.get(
+                    "notes",
+                    "",
+                )
+                or "—"
+            ),
+            FM,
+            C["text"],
+        )
+        notes_label.setWordWrap(True)
+        notes_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+
+        layout.addWidget(
+            notes_label,
+            notes_row,
+            1,
+            1,
+            3,
+        )
+
+        root.addWidget(summary_panel)
+
+    def _build_charts(
+        self,
+        root,
+    ) -> None:
+        self.fig = Figure(
+            figsize=(8, 6),
+            dpi=96,
+            facecolor=PLOT_BG,
+        )
+
+        self.fig.subplots_adjust(
+            left=0.08,
+            right=0.97,
+            top=0.95,
+            bottom=0.09,
+            hspace=0.50,
+        )
+
+        self.current_axis = (
+            self.fig.add_subplot(311)
+        )
+        self.voltage_axis = (
+            self.fig.add_subplot(312)
+        )
+        self.temperature_axis = (
+            self.fig.add_subplot(313)
+        )
+
+        for axis in (
+            self.current_axis,
+            self.voltage_axis,
+            self.temperature_axis,
+        ):
+            style_ax(axis)
+
+            axis.xaxis.set_major_formatter(
+                mdates.DateFormatter(
+                    "%H:%M:%S"
+                )
+            )
+
+        self.current_axis.set_title(
+            "Current History",
+            color=self.accent,
+            fontsize=9,
+            loc="left",
+        )
+        self.current_axis.set_ylabel(
+            "Current (A)",
+            color=PLOT_TEXT,
+            fontsize=8,
+        )
+
+        self.voltage_axis.set_title(
+            "Voltage History",
+            color=C["cyan"],
+            fontsize=9,
+            loc="left",
+        )
+        self.voltage_axis.set_ylabel(
+            "Voltage (V)",
+            color=PLOT_TEXT,
+            fontsize=8,
+        )
+
+        self.temperature_axis.set_title(
+            "Chamber Temperature History",
+            color=C["orange"],
+            fontsize=9,
+            loc="left",
+        )
+        self.temperature_axis.set_ylabel(
+            "Temperature (°C)",
+            color=PLOT_TEXT,
+            fontsize=8,
+        )
+        self.temperature_axis.set_xlabel(
+            "Time",
+            color=PLOT_TEXT,
+            fontsize=8,
+        )
+
+        (self.current_line,) = (
+            self.current_axis.plot(
+                [],
+                [],
+                color=self.accent,
+                linewidth=1.4,
+            )
+        )
+
+        (self.voltage_line,) = (
+            self.voltage_axis.plot(
+                [],
+                [],
+                color=C["cyan"],
+                linewidth=1.4,
+            )
+        )
+
+        (self.temperature_line,) = (
+            self.temperature_axis.plot(
+                [],
+                [],
+                color=C["orange"],
+                linewidth=1.4,
+            )
+        )
+
+        self.canvas = FigureCanvasQTAgg(
+            self.fig
+        )
+
+        root.addWidget(
+            self.canvas,
+            1,
+        )
+
+    def _build_actions(
+        self,
+        root,
+    ) -> None:
+        layout = QHBoxLayout()
+        layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        layout.setSpacing(8)
+
+        self.measurement_count_label = label(
+            "0 measurement samples",
+            FMS,
+            C["dim"],
+        )
+
+        export_button = QPushButton(
+            "EXPORT TEST DATA"
+        )
+        export_button.setStyleSheet(
+            button_style(self.accent)
+        )
+        export_button.clicked.connect(
+            self._export_test_data
+        )
+
+        close_button = QPushButton(
+            "CLOSE"
+        )
+        close_button.clicked.connect(
+            self.accept
+        )
+
+        layout.addWidget(
+            self.measurement_count_label
+        )
+        layout.addStretch()
+        layout.addWidget(export_button)
+        layout.addWidget(close_button)
+
+        root.addLayout(layout)
+
+    def _load_measurements(self) -> None:
+        test_session_id = self.record.get(
+            "id"
+        )
+
+        if test_session_id is None:
+            QMessageBox.warning(
+                self,
+                "Missing Test Record",
+                (
+                    "The selected test does not have "
+                    "a database session ID."
+                ),
+            )
+            return
+
+        try:
+            self.measurements = (
+                self.store.get_test_measurements(
+                    int(test_session_id)
+                )
+            )
+
+        except Exception as error:
+            QMessageBox.critical(
+                self,
+                "Database Error",
+                (
+                    "Unable to load the test "
+                    f"measurements.\n\n{error}"
+                ),
+            )
+            self.measurements = []
+
+        sample_count = len(
+            self.measurements
+        )
+
+        self.measurement_count_label.setText(
+            f"{sample_count:,} measurement "
+            f"sample{'s' if sample_count != 1 else ''}"
+        )
+
+    def _update_charts(self) -> None:
+        times = []
+        voltage_values = []
+        current_values = []
+        temperature_times = []
+        temperature_values = []
+
+        for measurement in self.measurements:
+            measured_at = measurement.get(
+                "measured_at"
+            )
+
+            if not isinstance(
+                measured_at,
+                datetime.datetime,
+            ):
+                continue
+
+            voltage = measurement.get(
+                "voltage_v"
+            )
+            current = measurement.get(
+                "current_a"
+            )
+            temperature = measurement.get(
+                "chamber_temp_c"
+            )
+
+            times.append(measured_at)
+            voltage_values.append(
+                float(voltage)
+                if voltage is not None
+                else float("nan")
+            )
+            current_values.append(
+                float(current)
+                if current is not None
+                else float("nan")
+            )
+
+            if temperature is not None:
+                temperature_times.append(
+                    measured_at
+                )
+                temperature_values.append(
+                    float(temperature)
+                )
+
+        self.current_line.set_data(
+            times,
+            current_values,
+        )
+
+        self.voltage_line.set_data(
+            times,
+            voltage_values,
+        )
+
+        self.temperature_line.set_data(
+            temperature_times,
+            temperature_values,
+        )
+
+        for axis in (
+            self.current_axis,
+            self.voltage_axis,
+            self.temperature_axis,
+        ):
+            axis.relim()
+            axis.autoscale_view()
+
+        self.fig.autofmt_xdate(
+            rotation=0,
+        )
+
+        self.canvas.draw_idle()
+
+    def _export_test_data(self) -> None:
+        etr_number = str(
+            self.record.get(
+                "etr_number",
+                "test",
+            )
+        )
+
+        safe_etr = "".join(
+            character
+            if character.isalnum()
+            or character in ("-", "_")
+            else "_"
+            for character in etr_number
+        )
+
+        default_filename = (
+            f"{safe_etr}_test_history.csv"
+        )
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Test Data",
+            default_filename,
+            "CSV Files (*.csv)",
+        )
+
+        if not file_path:
+            return
+
+        if not file_path.lower().endswith(
+            ".csv"
+        ):
+            file_path += ".csv"
+
+        try:
+            with open(
+                file_path,
+                "w",
+                newline="",
+                encoding="utf-8-sig",
+            ) as csv_file:
+                writer = csv.writer(csv_file)
+
+                writer.writerow(
+                    [
+                        "HTOL COMPLETED TEST SUMMARY",
+                    ]
+                )
+
+                summary_fields = (
+                    ("Database ID", "id"),
+                    ("PSU", "psu_label"),
+                    ("ETR Number", "etr_number"),
+                    ("Technician", "technician"),
+                    ("Started At", "started_at"),
+                    ("Completed At", "completed_at"),
+                    ("Target Hours", "target_hrs"),
+                    ("Hours Elapsed", "hours_elapsed"),
+                    ("Progress Percent", "progress_pct"),
+                    (
+                        "Required Voltage",
+                        "required_voltage",
+                    ),
+                    (
+                        "Required Current",
+                        "required_current",
+                    ),
+                    (
+                        "Calibrated Voltage",
+                        "calibrated_voltage",
+                    ),
+                    (
+                        "Calibrated Current",
+                        "calibrated_current",
+                    ),
+                    (
+                        "Average Voltage",
+                        "avg_voltage_v",
+                    ),
+                    (
+                        "Average Current",
+                        "avg_current_a",
+                    ),
+                    (
+                        "Average Chamber Temperature",
+                        "avg_temp_c",
+                    ),
+                    ("Final Notes", "notes"),
+                )
+
+                for heading, key in summary_fields:
+                    writer.writerow(
+                        [
+                            heading,
+                            self.record.get(
+                                key,
+                                "",
+                            ),
+                        ]
+                    )
+
+                writer.writerow([])
+                writer.writerow(
+                    [
+                        "TIMESTAMP",
+                        "VOLTAGE_V",
+                        "CURRENT_A",
+                        "CHAMBER_TEMP_C",
+                        "OUTPUT_ON",
+                        "PSU_ONLINE",
+                        "PSU_FAULT",
+                    ]
+                )
+
+                for measurement in self.measurements:
+                    measured_at = (
+                        measurement.get(
+                            "measured_at"
+                        )
+                    )
+
+                    if isinstance(
+                        measured_at,
+                        datetime.datetime,
+                    ):
+                        timestamp_text = (
+                            measured_at.isoformat(
+                                timespec="milliseconds"
+                            )
+                        )
+                    else:
+                        timestamp_text = str(
+                            measured_at or ""
+                        )
+
+                    writer.writerow(
+                        [
+                            timestamp_text,
+                            measurement.get(
+                                "voltage_v",
+                                "",
+                            ),
+                            measurement.get(
+                                "current_a",
+                                "",
+                            ),
+                            measurement.get(
+                                "chamber_temp_c",
+                                "",
+                            ),
+                            int(
+                                bool(
+                                    measurement.get(
+                                        "output_on",
+                                        False,
+                                    )
+                                )
+                            ),
+                            int(
+                                bool(
+                                    measurement.get(
+                                        "psu_online",
+                                        False,
+                                    )
+                                )
+                            ),
+                            int(
+                                bool(
+                                    measurement.get(
+                                        "psu_fault",
+                                        False,
+                                    )
+                                )
+                            ),
+                        ]
+                    )
+
+        except OSError as error:
+            QMessageBox.critical(
+                self,
+                "Export Error",
+                (
+                    "Unable to export the test data."
+                    f"\n\n{error}"
+                ),
+            )
+            return
+
+        QMessageBox.information(
+            self,
+            "Export Complete",
+            (
+                "The completed test data was exported "
+                f"successfully.\n\n{file_path}"
+            ),
+        )
+
 class TestHistoryPopup(QDialog):
     def __init__(self, parent, store):
         super().__init__(parent)
@@ -2024,6 +2817,9 @@ class TestHistoryPopup(QDialog):
         self.table.setHorizontalHeaderLabels(["DATE", "ETR #", "TECHNICIAN", "DURATION"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.itemSelectionChanged.connect(self.show_detail)
+        self.table.itemDoubleClicked.connect(
+            self.open_test_detail
+        )
         root.addWidget(self.table, 2)
         self.detail = QPlainTextEdit()
         self.detail.setReadOnly(True)
@@ -2132,17 +2928,61 @@ class TestHistoryPopup(QDialog):
                     item,
                 )
 
-    def show_detail(self):
-        i = self.table.currentRow()
-        if i < 0:
+    def open_test_detail(
+        self,
+        _item,
+    ) -> None:
+        row_index = self.table.currentRow()
+
+        if row_index < 0:
             return
-        r = self.filtered[i]
-        self.detail.setPlainText(
-            "\n".join(
-                f"{k.replace('_', ' ').title():16}: {v}"
-                for k, v in r.items()
-                if k not in ("current_snapshot", "temp_snapshot")
+
+        if row_index >= len(self.filtered):
+            return
+
+        record = self.filtered[row_index]
+
+        dialog = CompletedTestDetailDialog(
+            self,
+            self.store,
+            record,
+        )
+
+        dialog.exec()
+
+    def show_detail(self) -> None:
+        row_index = self.table.currentRow()
+
+        if row_index < 0:
+            return
+
+        if row_index >= len(self.filtered):
+            return
+
+        record = self.filtered[row_index]
+
+        excluded_fields = {
+            "id",
+            "psu_idx",
+        }
+
+        lines = []
+
+        for key, value in record.items():
+            if key in excluded_fields:
+                continue
+
+            heading = (
+                key.replace("_", " ")
+                .title()
             )
+
+            lines.append(
+                f"{heading:24}: {value}"
+            )
+
+        self.detail.setPlainText(
+            "\n".join(lines)
         )
 
 
