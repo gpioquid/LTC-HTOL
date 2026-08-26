@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from src.backend.data_repository import DataStore
+from src.backend.data_repository import DataRepository
 from src.backend.instrument_drivers import (
     psu_read,
     thermocouple_read,
@@ -41,9 +41,17 @@ from src.frontend.widgets import (
 )
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
-load_dotenv(PROJECT_DIR / ".env")
+load_dotenv(
+    PROJECT_DIR / ".env",
+    override=True,
+)
 
-UI_TEST_MODE = os.getenv("UI_TEST_MODE", "false").strip().lower() == "true"
+UI_TEST_MODE = (
+    os.getenv("UI_TEST_MODE", "false")
+    .strip()
+    .lower()
+    == "true"
+)
 
 NUM_PSU = int(os.environ["NUM_PSU"])
 POLL_MS = int(os.environ["POLL_MS"])
@@ -55,6 +63,20 @@ if not _data_file.is_absolute():
     _data_file = PROJECT_DIR / _data_file
 
 DATA_FILE = str(_data_file.resolve())
+
+DB_SAMPLE_INTERVAL_SECONDS = float(
+    os.getenv(
+        "DB_SAMPLE_INTERVAL_SECONDS",
+        "10",
+    )
+)
+
+DB_BATCH_FLUSH_SECONDS = float(
+    os.getenv(
+        "DB_BATCH_FLUSH_SECONDS",
+        "30",
+    )
+)
 
 
 class Bus(QObject):
@@ -74,8 +96,20 @@ class HTOLMonitor(QMainWindow):
         self._right_splitter_sizes = [560, 240]
 
         self.psus = [PSUState(index) for index in range(NUM_PSU)]
+        self._restore_message = None
         self.chamber = ChamberState()
-        self.store = DataStore()
+        self.store = DataRepository()
+        self._last_db_flush_dt = (datetime.datetime.now())
+
+        self._closing = False
+        self._fetch_thread = None
+        self._fetch_lock = threading.Lock()
+
+        self.poll_timer = QTimer(self)
+        self.poll_timer.timeout.connect(
+            self._start_fetch
+        )
+        self.poll_timer.start(POLL_MS)
 
         self.running = True
         self._poll_in_progress = False
@@ -88,7 +122,7 @@ class HTOLMonitor(QMainWindow):
         self.bus.fetched.connect(self.update_ui)
         self.bus.error.connect(self._handle_polling_error)
 
-        self._restore_live_state()
+        #self._restore_live_state()
         self._build_ui()
         self._connect_widget_signals()
         self._initialize_log()
@@ -98,45 +132,98 @@ class HTOLMonitor(QMainWindow):
     # Initialization
     # ==========================================================
 
-    def _on_test_started(self, index: int) -> None:
+    def _on_test_started(
+        self,
+        index: int,
+    ) -> None:
         psu = self.psus[index]
 
         psu.calibration_active = False
+        psu.calibration_complete = True
         psu.test_active = True
+        psu.power_on = True
 
         if psu.test_start_dt is None:
-            psu.test_start_dt = datetime.datetime.now()
+            psu.test_start_dt = (
+                datetime.datetime.now()
+            )
 
-        channel = self.psu_panel_widget.channel_widgets[index]
+        try:
+            self.store.save_live_state(
+                self.psus
+            )
+
+        except Exception as error:
+            psu.test_active = False
+
+            QMessageBox.critical(
+                self,
+                "Database Error",
+                (
+                    "The test could not be started because "
+                    "the ongoing test record was not saved."
+                    f"\n\n{error}"
+                ),
+            )
+            return
+
+        channel = (
+            self.psu_panel_widget
+            .channel_widgets[index]
+        )
         channel.update_state(psu)
 
         self._log(
             f"TEST STARTED  "
             f"PSU{index + 1}  "
             f"ETR:{psu.etr_number}  "
-            f"Tech:{psu.technician}  "
-            f"Target:{psu.target_hrs:g} h  "
+            f"Required:"
             f"{psu.set_voltage:.3f} V / "
-            f"{psu.set_current:.3f} A"
+            f"{psu.set_current:.3f} A  "
+            f"Calibrated:"
+            f"{psu.calibrated_voltage:.3f} V / "
+            f"{psu.calibrated_current:.3f} A"
         )
 
-        self._auto_save()
+    def _restore_live_state(self) -> None:
+        try:
+            saved_states = self.store.load_live_state()
 
-    def _restore_live_state(self):
-        saved_states = self.store.load_live_state()
+        except Exception as error:
+            self._restore_message = (
+                f"Unable to restore ongoing tests: {error}"
+            )
+            return
+
         restored_channels = []
 
-        for psu in self.psus:
-            saved_state = saved_states.get(str(psu.idx))
+        for saved_state in saved_states:
+            index = int(saved_state["psu_idx"])
 
-            if saved_state and saved_state.get("test_active"):
-                psu.restore(saved_state)
+            if not 0 <= index < len(self.psus):
+                continue
 
-                restored_channels.append(f"PSU{psu.idx + 1}/{psu.etr_number}")
+            psu = self.psus[index]
+            psu.restore(saved_state)
+
+            psu.power_on = bool(
+                saved_state.get("power_on", False)
+            )
+            psu.online = bool(
+                saved_state.get("online", False)
+            )
+            psu.fault = bool(
+                saved_state.get("fault", False)
+            )
+
+            restored_channels.append(
+                f"PSU{index + 1}/{psu.etr_number}"
+            )
 
         if restored_channels:
-            self._restore_message = "Resumed active tests: " + ", ".join(
-                restored_channels
+            self._restore_message = (
+                "Restored ongoing tests: "
+                + ", ".join(restored_channels)
             )
         else:
             self._restore_message = None
@@ -338,17 +425,17 @@ class HTOLMonitor(QMainWindow):
         if self._restore_message:
             self._log(self._restore_message)
 
-    def _start_timers(self):
+    def _start_timers(self) -> None:
         self.poll_timer = QTimer(self)
-        self.poll_timer.timeout.connect(self._poll_cycle)
+
+        self.poll_timer.timeout.connect(
+            self._start_fetch
+        )
+
         self.poll_timer.start(POLL_MS)
 
-        self.clock_timer = QTimer(self)
-        self.clock_timer.timeout.connect(self._update_clock)
-        self.clock_timer.start(1000)
-
-        self._update_clock()
-        self._poll_cycle()
+        # Run the first polling cycle immediately.
+        self._start_fetch()
 
     # ==========================================================
     # Logging
@@ -357,10 +444,18 @@ class HTOLMonitor(QMainWindow):
     def _log(self, message):
         self.event_log_widget.append_event(message)
 
-    def _persist_event(self, message):
+    def _persist_event(self, event) -> None:
+        def save_event() -> None:
+            try:
+                self.store.append_event(event)
+
+            except Exception as error:
+                print(
+                    f"Unable to persist event: {error}"
+                )
+
         threading.Thread(
-            target=self.store.append_event,
-            args=(message,),
+            target=save_event,
             daemon=True,
         ).start()
 
@@ -544,41 +639,78 @@ class HTOLMonitor(QMainWindow):
 
     def _on_test_completed(
         self,
-        index,
-        record,
-    ):
+        index: int,
+        record: dict,
+    ) -> None:
         psu = self.psus[index]
 
         self._log(
-            f"ARCHIVED  "
-            f"PSU{index + 1} / "
-            f"{psu.etr_number}  "
-            f"[{record['outcome']}]  "
-            f"{record['hours_elapsed']:.2f} h  "
-            f"Tech:{psu.technician}"
+            f"TEST ENDED  "
+            f"PSU{index + 1}  "
+            f"ETR:{record.get('etr_number', '—')}  "
+            f"Tech:{record.get('technician', '—')}  "
+            f"Duration:{record.get('hours_elapsed', 0.0):.2f} h"
         )
 
-        psu.hours_elapsed = 0.0
-        psu.test_start_dt = None
+        # Reset the completed PSU channel.
         psu.test_active = False
-        psu.notes = ""
+        psu.calibration_active = False
+        psu.calibration_complete = False
+        psu.test_start_dt = None
 
-        psu.current_hist.clear()
-        psu.voltage_hist.clear()
-        psu.time_hist.clear()
+        psu.power_on = False
+        psu.hours_elapsed = 0.0
 
-        psu.etr_number = f"ETR-{1001 + index}"
-        psu.technician = "—"
+        psu.calibrated_voltage = None
+        psu.calibrated_current = None
 
-        self.psu_panel_widget.reset_channel(
-            index,
-            psu.etr_number,
-            psu.technician,
-        )
+        # Keep the required configuration if you want the completed
+        # values visible until the next test setup.
+        #
+        # To clear them instead, uncomment:
+        # psu.etr_number = ""
+        # psu.technician = "—"
+        # psu.target_hrs = 1000
+        # psu.set_voltage = None
+        # psu.set_current = None
+        # psu.notes = ""
 
-        self.psu_panel_widget.channel_widgets[index].update_state(psu)
+        channel = self.psu_panel_widget.channel_widgets[index]
+        channel.update_state(psu)
 
         self._auto_save()
+
+    def _sample_active_test(
+        self,
+        psu,
+        now: datetime.datetime,
+    ) -> None:
+        """Buffer one sample at the configured database interval."""
+
+        if not psu.test_active:
+            return
+
+        last_sample = psu.last_db_sample_dt
+
+        if last_sample is not None:
+            elapsed_seconds = (
+                now - last_sample
+            ).total_seconds()
+
+            if (
+                elapsed_seconds
+                < DB_SAMPLE_INTERVAL_SECONDS
+            ):
+                return
+
+        self.store.buffer_live_measurement(
+            psu=psu,
+            chamber=self.chamber,
+            measured_at=now,
+        )
+
+        psu.last_db_sample_dt = now
+
 
     def _edit_notes(self, index):
         psu = self.psus[index]
@@ -681,7 +813,12 @@ class HTOLMonitor(QMainWindow):
         except Exception:
             traceback.print_exc()
 
-    def _open_calibration(self, index):
+    def _open_calibration(self, index: int) -> None:
+        print(
+            f"Opening PSU {index + 1} calibration: "
+            f"UI_TEST_MODE={UI_TEST_MODE}"
+        )
+
         dialog = PSUCalibrationPopup(
             self,
             self.psus[index],
@@ -755,72 +892,106 @@ class HTOLMonitor(QMainWindow):
     # Polling
     # ==========================================================
 
-    def _poll_cycle(self):
-        if not self.running:
+    def _start_fetch(self) -> None:
+        if self._closing:
             return
 
-        if self._poll_in_progress:
+        if (
+            self._fetch_thread is not None
+            and self._fetch_thread.is_alive()
+        ):
             return
 
-        self._poll_in_progress = True
-
-        threading.Thread(
+        self._fetch_thread = threading.Thread(
             target=self._fetch,
             daemon=True,
-        ).start()
+            name="htol-polling",
+        )
+        self._fetch_thread.start()
 
-    def _fetch(self):
-        now = datetime.datetime.now()
+    def _fetch(self) -> None:
+        if self._closing:
+            return
+
+        if not self._fetch_lock.acquire(blocking=False):
+            return
 
         try:
+            if self._closing:
+                return
+
+            now = datetime.datetime.now()
+
             self._fetch_psu_readings(now)
+
+            if self._closing:
+                return
+
             self._fetch_chamber_reading(now)
+
+            if self._closing:
+                return
+
             self._perform_periodic_save(now)
 
-            self.bus.fetched.emit(now)
+            if self._closing:
+                return
+
+            try:
+                self.bus.fetched.emit(now)
+
+            except RuntimeError:
+                if not self._closing:
+                    raise
 
         except Exception as error:
-            traceback.print_exc()
-            self.bus.error.emit(f"Polling error: {error}")
+            if self._closing:
+                return
+
+            try:
+                self.bus.error.emit(
+                    f"Polling error: {error}"
+                )
+
+            except RuntimeError:
+                # The signal bus may already be deleted
+                # while the application is closing.
+                pass
 
         finally:
-            self._poll_in_progress = False
+            self._fetch_lock.release()
 
-    def _fetch_psu_readings(self, now):
+    def _fetch_psu_readings(
+        self,
+        now: datetime.datetime,
+    ) -> None:
         for index, psu in enumerate(self.psus):
-            previous_fault = psu.fault
-            if UI_TEST_MODE:
-                psu.online = True
-                psu.fault = False
+            if self._closing:
+                return
 
-                if psu.power_on:
-                    psu.voltage_v = float(psu.calibrated_voltage or 0.0)
-                    psu.current_a = float(psu.calibrated_current or 0.0)
+            reading = psu_read(index)
 
-                else:
-                    psu.voltage_v = 0.0
-                    psu.current_a = 0.0
-            else:
-                reading = psu_read(index)
+            if self._closing:
+                return
 
-                psu.online = reading["online"]
-                psu.power_on = reading["power_on"]
-                psu.voltage_v = reading["voltage_v"]
-                psu.current_a = reading["current_a"]
-                psu.fault = reading["fault"]
+            psu.online = reading["online"]
+            psu.power_on = reading["power_on"]
+            psu.voltage_v = reading["voltage_v"]
+            psu.current_a = reading["current_a"]
+            psu.fault = reading["fault"]
 
-                if psu.test_active and psu.power_on:
-                    psu.hours_elapsed += POLL_MS / 3_600_000
+            psu.current_hist.append(
+                psu.current_a
+            )
+            psu.voltage_hist.append(
+                psu.voltage_v
+            )
+            psu.time_hist.append(now)
 
-                psu.current_hist.append(psu.current_a)
-                psu.voltage_hist.append(psu.voltage_v)
-                psu.time_hist.append(now)
-
-                if psu.fault and not previous_fault:
-                    self.bus.error.emit(
-                        f"FAULT detected on PSU{index + 1} ({psu.etr_number})"
-                    )
-
+            self._sample_active_test(
+                psu,
+                now,
+            )
     def _fetch_chamber_reading(self, now):
         reading = thermocouple_read()
 
@@ -830,14 +1001,51 @@ class HTOLMonitor(QMainWindow):
         self.chamber.temp_hist.append(self.chamber.temp_c)
         self.chamber.time_hist.append(now)
 
-    def _perform_periodic_save(self, now):
-        elapsed = (now - self._last_save).total_seconds()
+    def _perform_periodic_save(
+        self,
+        now: datetime.datetime,
+    ) -> None:
+        """Save ongoing sessions and flush buffered measurements."""
 
-        if elapsed < AUTO_SAVE_INTERVAL:
+        try:
+            self.store.save_live_state(
+                self.psus
+            )
+
+        except Exception as error:
+            self._log(
+                f"Unable to save live test state: "
+                f"{error}"
+            )
+
+        elapsed_since_flush = (
+            now - self._last_db_flush_dt
+        ).total_seconds()
+
+        if (
+            elapsed_since_flush
+            < DB_BATCH_FLUSH_SECONDS
+        ):
             return
 
-        self._last_save = now
-        self.store.save_live_state(self.psus)
+        try:
+            inserted_count = (
+                self.store.flush_measurement_buffer()
+            )
+
+            self._last_db_flush_dt = now
+
+            if inserted_count:
+                print(
+                    "SQLite measurement flush: "
+                    f"{inserted_count} row(s)"
+                )
+
+        except Exception as error:
+            self._log(
+                f"Unable to flush test measurements: "
+                f"{error}"
+            )
 
     def _handle_polling_error(
         self,
@@ -872,20 +1080,39 @@ class HTOLMonitor(QMainWindow):
     # Shutdown
     # ==========================================================
 
-    def closeEvent(self, event):
-        self.running = False
+    def closeEvent(self, event) -> None:
+        self._closing = True
 
-        self.poll_timer.stop()
-        self.clock_timer.stop()
+        # Stop scheduling new polling threads.
+        if hasattr(self, "poll_timer"):
+            self.poll_timer.stop()
+
+        # If your timer has a different name, stop it too.
+        if hasattr(self, "timer"):
+            self.timer.stop()
+
+        fetch_thread = self._fetch_thread
+
+        if (
+            fetch_thread is not None
+            and fetch_thread.is_alive()
+            and fetch_thread
+            is not threading.current_thread()
+        ):
+            fetch_thread.join(timeout=12.0)
 
         try:
-            self.store.save_live_state(self.psus)
+            self.store.save_live_state(
+                self.psus
+            )
+
+            self.store.flush_measurement_buffer()
 
         except Exception as error:
-            QMessageBox.warning(
-                self,
-                "Save Warning",
-                f"Unable to save the current state:\n{error}",
+            print(
+                f"Final database save failed: {error}"
             )
+
+        disconnect_psus()
 
         event.accept()

@@ -1,4 +1,5 @@
 import datetime
+import sqlite3
 import threading
 
 import matplotlib.dates as mdates
@@ -21,7 +22,6 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
-    QCheckBox,
 )
 
 from src.backend.instrument_drivers import psu_set_output, psu_set_power
@@ -324,7 +324,7 @@ class PSUCalibrationPopup(QDialog):
         )
         layout.addWidget(
             label(
-                f"{self.psu.set_voltage:.3f} V / {self.psu.set_current:.3f} A",
+                f"{self.psu.set_voltage:.2f} V / {self.psu.set_current:.2f} A",
                 FMB,
                 self.accent,
             ),
@@ -354,9 +354,11 @@ class PSUCalibrationPopup(QDialog):
             else self.psu.set_current
         )
 
-        self.voltage_input = QLineEdit(f"{float(initial_voltage):.3f}")
+        self.voltage_input = QLineEdit()
+        self.voltage_input.setPlaceholderText("Enter Voltage")
 
-        self.current_input = QLineEdit(f"{float(initial_current):.3f}")
+        self.current_input = QLineEdit()
+        self.current_input.setPlaceholderText("Enter Current")
 
         layout.addWidget(
             label("PSU VOLTAGE COMMAND:", FMS, C["dim"]),
@@ -413,12 +415,12 @@ class PSUCalibrationPopup(QDialog):
         )
 
         self.voltage_readback = label(
-            "0.000 V",
+            "0.00 V",
             FMB,
             self.accent,
         )
         self.current_readback = label(
-            "0.000 A",
+            "0.00 A",
             FMB,
             self.accent,
         )
@@ -468,16 +470,44 @@ class PSUCalibrationPopup(QDialog):
 
         root.addLayout(layout)
 
-    def _apply_calibration_values(self):
+    def _apply_calibration_values(self) -> None:
         try:
-            voltage = float(self.voltage_input.text())
-            current = float(self.current_input.text())
+            voltage_text = self.voltage_input.text().strip()
+            current_text = self.current_input.text().strip()
+
+            if not voltage_text:
+                raise ValueError(
+                    "Enter a calibration voltage."
+                )
+
+            if not current_text:
+                raise ValueError(
+                    "Enter a calibration current."
+                )
+
+            voltage = float(voltage_text)
+            current = float(current_text)
 
             if voltage < 0:
-                raise ValueError("Calibration voltage cannot be negative.")
+                raise ValueError(
+                    "Calibration voltage cannot be negative."
+                )
 
             if current < 0:
-                raise ValueError("Calibration current cannot be negative.")
+                raise ValueError(
+                    "Calibration current cannot be negative."
+                )
+
+            print(
+                f"PSU {self.psu.idx + 1}: "
+                f"UI Test Mode = {self.ui_test_mode}"
+            )
+
+            print(
+                f"PSU {self.psu.idx + 1}: "
+                f"applying calibration values "
+                f"{voltage:.3f} V / {current:.3f} A"
+            )
 
             if self.ui_test_mode:
                 result = {
@@ -485,30 +515,60 @@ class PSUCalibrationPopup(QDialog):
                     "voltage": voltage,
                     "current": current,
                 }
+            else:
+                result = psu_set_output(
+                    self.psu.idx,
+                    voltage,
+                    current,
+                )
 
-            result = psu_set_output(
-                self.psu.idx,
-                voltage,
-                current,
-            )
-
-        except Exception as error:
-            QMessageBox.critical(
+        except ValueError as error:
+            QMessageBox.warning(
                 self,
-                "Calibration Error",
-                f"Unable to apply calibration values:\n{error}",
+                "Invalid Calibration Values",
+                str(error),
             )
             return
 
-        self.psu.calibrated_voltage = result["voltage"]
-        self.psu.calibrated_current = result["current"]
+        except Exception as error:
+            print(
+                f"PSU {self.psu.idx + 1} "
+                f"calibration failed: {error!r}"
+            )
+
+            QMessageBox.critical(
+                self,
+                "Calibration Error",
+                (
+                    "Unable to apply calibration values.\n\n"
+                    f"{type(error).__name__}: {error}"
+                ),
+            )
+            return
+
+        self.psu.calibrated_voltage = float(
+            result["voltage"]
+        )
+        self.psu.calibrated_current = float(
+            result["current"]
+        )
+
         self.psu.calibration_active = True
         self.psu.calibration_complete = False
 
         self.status_label.setText(
-            f"Calibration values applied: "
-            f"{result['voltage']:.3f} V / "
-            f"{result['current']:.3f} A"
+            "Calibration values applied: "
+            f"{self.psu.calibrated_voltage:.3f} V / "
+            f"{self.psu.calibrated_current:.3f} A"
+        )
+
+        self.status_label.setStyleSheet(
+            f"color: {C['green']}; border: 0;"
+        )
+
+        print(
+            f"PSU {self.psu.idx + 1}: "
+            "calibration values applied successfully"
         )
 
     def _toggle_output(self):
@@ -556,8 +616,8 @@ class PSUCalibrationPopup(QDialog):
         self._refresh_readback()
 
     def _refresh_readback(self):
-        self.voltage_readback.setText(f"{self.psu.voltage_v:.3f} V")
-        self.current_readback.setText(f"{self.psu.current_a:.3f} A")
+        self.voltage_readback.setText(f"{self.psu.voltage_v:.2f} V")
+        self.current_readback.setText(f"{self.psu.current_a:.2f} A")
 
         if self.psu.power_on:
             self.output_readback.setText("ON")
@@ -568,65 +628,125 @@ class PSUCalibrationPopup(QDialog):
             self.output_readback.setStyleSheet(f"color: {C['dim']}; border: 0;")
             self.output_button.setText("TURN OUTPUT ON")
 
-    def _start_test(self):
-        if self.ui_test_mode:
-            try:
-                voltage_text = self.voltage_input.text().strip()
-                current_text = self.current_input.text().strip()
+    def _start_test(self) -> None:
+        if (
+            self.psu.calibrated_voltage is None
+            or self.psu.calibrated_current is None
+        ):
+            QMessageBox.warning(
+                self,
+                "Calibration Incomplete",
+                "Apply the final calibration values before starting the test.",
+            )
+            return
 
-                calibration_voltage = (
-                    float(voltage_text)
-                    if voltage_text
-                    else float(self.psu.set_voltage or 0.0)
+        calibrated_voltage = float(
+            self.psu.calibrated_voltage
+        )
+        calibrated_current = float(
+            self.psu.calibrated_current
+        )
+
+        try:
+            if self.ui_test_mode:
+                # Simulate reapplying the final calibrated values.
+                self.psu.voltage_v = calibrated_voltage
+                self.psu.current_a = calibrated_current
+
+                actual_power_state = True
+
+            else:
+                # Reapply the final calibrated values even if the
+                # output was turned OFF after calibration.
+                result = psu_set_output(
+                    self.psu.idx,
+                    calibrated_voltage,
+                    calibrated_current,
                 )
 
-                calibration_current = (
-                    float(current_text)
-                    if current_text
-                    else float(self.psu.set_current or 0.0)
+                self.psu.calibrated_voltage = float(
+                    result["voltage"]
+                )
+                self.psu.calibrated_current = float(
+                    result["current"]
                 )
 
-                if calibration_voltage < 0:
-                    raise ValueError("Calibration voltage cannot be negative")
-
-                if calibration_current < 0:
-                    raise ValueError("Calibration current cannot be negative")
-
-            except ValueError as error:
-                QMessageBox.warning(self, "Invalid Calibration Values", str(error))
-
-            # Simulate the final calibrated operating values
-            self.psu.calibrated_voltage = calibration_voltage
-            self.psu.calibrated_current = calibration_current
-
-            # Simulate an online PSU with its output enabled
-            self.psu.online = True
-            self.psu.power_on = True
-            self.psu.fault = False
-
-            # Simulate measured readback values
-            self.psu.voltage_v = calibration_voltage
-            self.psu.current_a = calibration_current
-
-        else:
-            if (
-                self.psu.calibrated_voltage is None
-                or self.psu.calibrated_current is None
-            ):
-                QMessageBox.warning(
-                    self,
-                    "Calibration Incomplete",
-                    "Apply valid calibration values before starting.",
+                # START TEST must always turn the output back ON.
+                actual_power_state = psu_set_power(
+                    self.psu.idx,
+                    True,
                 )
-                return
+
+                if not actual_power_state:
+                    raise RuntimeError(
+                        "The PSU output could not be turned ON."
+                    )
+
+        except Exception as error:
+            QMessageBox.critical(
+                self,
+                "Test Startup Error",
+                (
+                    "Unable to start the test with the "
+                    "PSU output enabled.\n\n"
+                    f"{error}"
+                ),
+            )
+            return
+
+        # Update the application state only after the PSU
+        # commands have completed successfully.
+        self.psu.online = True
+        self.psu.power_on = True
+        self.psu.fault = False
 
         self.psu.calibration_active = False
         self.psu.calibration_complete = True
+
         self.psu.test_active = True
         self.psu.test_start_dt = datetime.datetime.now()
+        self.psu.hours_elapsed = 0.0
+        self.psu.last_db_sample_dt = None
 
-        self.on_test_started(self.psu.idx)
+        self.output_readback.setText("ON")
+        self.output_button.setText("TURN OUTPUT OFF")
+
+        self.on_test_started(
+            self.psu.idx
+        )
+
         self.accept()
+
+    def reject(self) -> None:
+        if (
+            self.psu.calibration_active
+            and not self.psu.test_active
+        ):
+            try:
+                if self.ui_test_mode:
+                    self.psu.power_on = False
+                    self.psu.voltage_v = 0.0
+                    self.psu.current_a = 0.0
+                else:
+                    self.psu.power_on = psu_set_power(
+                        self.psu.idx,
+                        False,
+                    )
+
+            except Exception as error:
+                QMessageBox.critical(
+                    self,
+                    "Output Shutdown Error",
+                    (
+                        "Unable to turn off the calibration "
+                        f"output.\n\n{error}"
+                    ),
+                )
+                return
+
+            self.psu.calibration_active = False
+
+        super().reject()
 
 
 class PSUDetailPopup(QDialog):
@@ -661,6 +781,23 @@ class PSUDetailPopup(QDialog):
 
         self.ranges["Live"].setChecked(True)
         self.refresh()
+
+        # Refresh the ongoing-test dialog using the latest PSUState values.
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.timeout.connect(self.refresh)
+        self.refresh_timer.start(1000)
+
+    def closeEvent(self, event) -> None:
+        if hasattr(self, "refresh_timer"):
+            self.refresh_timer.stop()
+
+        super().closeEvent(event)
+
+    def accept(self) -> None:
+        if hasattr(self, "refresh_timer"):
+            self.refresh_timer.stop()
+
+        super().accept()
 
     def _build_settings(self, root) -> None:
         settings_panel = panel()
@@ -1837,6 +1974,48 @@ class CompleteTestDialog(QDialog):
             else 0.0
         )
 
+        current_limit = 300
+
+        current_snapshot = list(
+            psu.current_hist
+        )[-current_limit:]
+
+        voltage_snapshot = list(
+            psu.voltage_hist
+        )[-current_limit:]
+
+        current_time_snapshot = [
+            timestamp.isoformat(
+                timespec="seconds"
+            )
+            if isinstance(
+                timestamp,
+                datetime.datetime,
+            )
+            else str(timestamp)
+            for timestamp in list(
+                psu.time_hist
+            )[-current_limit:]
+        ]
+
+        temp_snapshot = list(
+            chamber.temp_hist
+        )[-current_limit:]
+
+        temp_time_snapshot = [
+            timestamp.isoformat(
+                timespec="seconds"
+            )
+            if isinstance(
+                timestamp,
+                datetime.datetime,
+            )
+            else str(timestamp)
+            for timestamp in list(
+                chamber.time_hist
+            )[-current_limit:]
+        ]
+
         record = {
             "psu_idx": psu.idx,
             "psu_label": f"PSU{psu.idx + 1}",
@@ -1847,7 +2026,7 @@ class CompleteTestDialog(QDialog):
                     timespec="seconds"
                 )
                 if psu.test_start_dt
-                else "—"
+                else None
             ),
             "completed_at": (
                 datetime.datetime.now().isoformat(
@@ -1858,13 +2037,19 @@ class CompleteTestDialog(QDialog):
                 psu.hours_elapsed,
                 4,
             ),
-            "target_hrs": psu.target_hrs,
+            "target_hrs": float(
+                psu.target_hrs
+            ),
             "progress_pct": round(
                 psu.progress_pct,
                 2,
             ),
-            "required_voltage": psu.set_voltage,
-            "required_current": psu.set_current,
+            "required_voltage": (
+                psu.set_voltage
+            ),
+            "required_current": (
+                psu.set_current
+            ),
             "calibrated_voltage": (
                 psu.calibrated_voltage
             ),
@@ -1884,21 +2069,41 @@ class CompleteTestDialog(QDialog):
                 2,
             ),
             "notes": final_notes,
-            "current_snapshot": list(
-                psu.current_hist
-            )[-300:],
-            "voltage_snapshot": list(
-                psu.voltage_hist
-            )[-300:],
-            "temp_snapshot": list(
-                chamber.temp_hist
-            )[-300:],
+            "current_snapshot": current_snapshot,
+            "voltage_snapshot": voltage_snapshot,
+            "temp_snapshot": temp_snapshot,
+            "current_time_snapshot": (
+                current_time_snapshot
+            ),
+            "temp_time_snapshot": (
+                temp_time_snapshot
+            ),
         }
 
-        self.store.complete_test(record)
-        self.on_complete(psu.idx, record)
-        self.accept()
+        try:
+            test_session_id = (
+                self.store.complete_test(record)
+            )
 
+        except sqlite3.Error as error:
+            QMessageBox.critical(
+                self,
+                "Database Error",
+                (
+                    "The test could not be saved to "
+                    f"the SQLite database.\n\n{error}"
+                ),
+            )
+            return
+
+        record["id"] = test_session_id
+
+        self.on_complete(
+            psu.idx,
+            record,
+        )
+
+        self.accept()
 
 class TestHistoryPopup(QDialog):
     def __init__(self, parent, store):
@@ -1926,7 +2131,23 @@ class TestHistoryPopup(QDialog):
         self.load()
 
     def load(self):
-        self.records = list(reversed(self.store.get_completed_tests()))
+        try:
+            self.records = (
+                self.store.get_completed_tests()
+            )
+
+        except sqlite3.Error as error:
+            QMessageBox.critical(
+                self,
+                "Database Error",
+                (
+                    "Unable to load completed tests.\n\n"
+                    f"{error}"
+                ),
+            )
+
+            self.records = []
+
         self.apply_filter()
 
     def apply_filter(self):

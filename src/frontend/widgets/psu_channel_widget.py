@@ -5,8 +5,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QProgressBar,
-    QVBoxLayout,
     QSizePolicy,
+    QVBoxLayout,
 )
 
 from src.frontend.ui_styles import (

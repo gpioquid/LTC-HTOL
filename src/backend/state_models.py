@@ -14,10 +14,11 @@ MAX_HIST = int(os.environ["MAX_HIST"])
 
 class PSUState:
     def __init__(self, idx):
+        
         self.idx = idx
         self.etr_number = f"ETR-{1000 + idx + 1}"
         self.technician = "—"
-
+        
         self.target_hrs = 1000
         self.hours_elapsed = 0.0
 
@@ -42,6 +43,8 @@ class PSUState:
         self.notes = ""
         self.test_start_dt = None
         self.test_active = False
+
+        self.last_db_sample_dt = None
 
         self.current_hist = deque(maxlen=MAX_HIST)
         self.voltage_hist = deque(maxlen=MAX_HIST)

@@ -8,3 +8,8 @@ htol_data.json
 
 scripts/
 HTOL.py
+
+
+
+data/*.db-shm
+data/*.db-wal

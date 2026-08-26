@@ -1,132 +1,740 @@
+import datetime
 import os
+import sqlite3
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
 
+
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(PROJECT_DIR / ".env")
-import datetime
-import json
-import threading
-
-_data_file = Path(os.environ["DATA_FILE"])
-if not _data_file.is_absolute():
-    _data_file = PROJECT_DIR / _data_file
-DATA_FILE = str(_data_file.resolve())
 
 
-class DataStore:
-    """
-    Single JSON file  htol_data.json  with three sections:
-      live_state        — PSU states saved periodically so tests survive restarts
-      completed_tests   — Archived records of finished tests
-      event_log         — Time-stamped event strings
-    """
+def _resolve_database_path() -> Path:
+    configured_path = os.getenv(
+        "SQLITE_DATABASE_PATH",
+        "data/htol_monitor.db",
+    )
 
-    _lock = threading.Lock()
+    database_path = Path(configured_path)
 
-    def __init__(self, path=DATA_FILE):
-        self.path = path
-        self._ensure_file()
+    if not database_path.is_absolute():
+        database_path = PROJECT_DIR / database_path
 
-    def _ensure_file(self):
-        if not os.path.exists(self.path):
-            self._write({"live_state": {}, "completed_tests": [], "event_log": []})
+    return database_path.resolve()
 
-    def _read(self) -> dict:
-        try:
-            with open(self.path, "r") as f:
-                return json.load(f)
-        except Exception:
-            return {"live_state": {}, "completed_tests": [], "event_log": []}
 
-    def _write(self, data: dict):
-        with self._lock, open(self.path, "w") as f:
-            json.dump(data, f, indent=2, default=str)
+DATABASE_PATH = _resolve_database_path()
 
-    # ── Live state (auto-save / resume) ──────────────────────────
 
-    def save_live_state(self, psus: list):
-        """Persist in-progress test state so it can be resumed after restart."""
-        data = self._read()
-        for psu in psus:
-            data["live_state"][str(psu.idx)] = {
-                "etr_number": psu.etr_number,
-                "technician": psu.technician,
-                "target_hrs": psu.target_hrs,
-                "hours_elapsed": psu.hours_elapsed,
-                "notes": psu.notes,
-                "test_start_dt": psu.test_start_dt.isoformat()
-                if psu.test_start_dt
-                else None,
-                "set_voltage": psu.set_voltage,
-                "set_current": psu.set_current,
-                "calibrated_voltage": psu.calibrated_voltage,
-                "calibrated_current": psu.calibrated_current,
-                "calibration_complete": psu.calibration_complete,
-                "test_active": psu.test_active,
-                # Keep a compact snapshot (last 200 pts) for the history plot
-                "current_snap": list(psu.current_hist)[-200:],
-                "temp_snap": [],  # filled by caller
-            }
-        self._write(data)
+class DataRepository:
+    """SQLite storage for ongoing and completed HTOL tests."""
 
-    def load_live_state(self) -> dict:
-        return self._read().get("live_state", {})
-
-    # ── Completed tests ───────────────────────────────────────────
-
-    def complete_test(self, record: dict):
-        data = self._read()
-        data.setdefault("completed_tests", []).append(record)
-        # Clear the live slot for this PSU
-        data["live_state"].pop(str(record.get("psu_idx", "")), None)
-        self._write(data)
-
-    def get_completed_tests(self) -> list:
-        return self._read().get("completed_tests", [])
-
-    # ── Events ───────────────────────────────────────────────────
-
-    def append_event(self, msg: str):
-        data = self._read()
-        data.setdefault("event_log", []).append(
-            {
-                "ts": datetime.datetime.now().isoformat(timespec="seconds"),
-                "msg": msg,
-            }
+    def __init__(
+        self,
+        database_path: Path | None = None,
+    ) -> None:
+        self.database_path = Path(
+            database_path or DATABASE_PATH
         )
-        data["event_log"] = data["event_log"][-2000:]
-        self._write(data)
 
-    # ── Snapshot export ───────────────────────────────────────────
+        self.database_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
-    def export_snapshot(self, psus: list, chamber_temp: float) -> str:
-        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        fpath = os.path.join(os.path.dirname(self.path), f"htol_snapshot_{ts}.json")
-        snap = {
-            "snapshot_time": ts,
-            "chamber_temp_c": chamber_temp,
-            "psus": [
+        self._write_lock = threading.RLock()
+        self._measurement_buffer: list[tuple] = []
+
+        self._initialize_database()
+
+    @contextmanager
+    def _connection(self):
+        connection = sqlite3.connect(
+            self.database_path,
+            timeout=10.0,
+        )
+
+        connection.row_factory = sqlite3.Row
+
+        try:
+            connection.execute(
+                "PRAGMA foreign_keys = ON"
+            )
+            connection.execute(
+                "PRAGMA busy_timeout = 10000"
+            )
+
+            yield connection
+            connection.commit()
+
+        except Exception:
+            connection.rollback()
+            raise
+
+        finally:
+            connection.close()
+
+    def _initialize_database(self) -> None:
+        with self._write_lock:
+            with self._connection() as connection:
+                connection.execute(
+                    "PRAGMA journal_mode = WAL"
+                )
+
+                connection.execute(
+                    "PRAGMA synchronous = NORMAL"
+                )
+
+                connection.executescript(
+                    """
+                    CREATE TABLE IF NOT EXISTS
+                        live_test_sessions
+                    (
+                        psu_idx INTEGER PRIMARY KEY,
+                        psu_label TEXT NOT NULL,
+
+                        etr_number TEXT NOT NULL,
+                        technician TEXT NOT NULL,
+
+                        started_at_ms INTEGER,
+
+                        target_hrs REAL NOT NULL,
+                        hours_elapsed REAL NOT NULL DEFAULT 0,
+                        progress_pct REAL NOT NULL DEFAULT 0,
+
+                        required_voltage REAL,
+                        required_current REAL,
+
+                        calibrated_voltage REAL,
+                        calibrated_current REAL,
+
+                        calibration_complete INTEGER
+                            NOT NULL DEFAULT 0,
+
+                        output_on INTEGER NOT NULL DEFAULT 0,
+                        psu_online INTEGER NOT NULL DEFAULT 0,
+                        psu_fault INTEGER NOT NULL DEFAULT 0,
+
+                        notes TEXT NOT NULL DEFAULT '',
+                        updated_at_ms INTEGER NOT NULL
+                    );
+
+
+                    CREATE TABLE IF NOT EXISTS
+                        live_test_measurements
+                    (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                        psu_idx INTEGER NOT NULL,
+                        measured_at_ms INTEGER NOT NULL,
+
+                        voltage_v REAL,
+                        current_a REAL,
+                        chamber_temp_c REAL,
+
+                        output_on INTEGER NOT NULL DEFAULT 0,
+                        psu_online INTEGER NOT NULL DEFAULT 0,
+                        psu_fault INTEGER NOT NULL DEFAULT 0,
+
+                        FOREIGN KEY (psu_idx)
+                            REFERENCES live_test_sessions(psu_idx)
+                            ON DELETE CASCADE
+                    );
+
+                    CREATE INDEX IF NOT EXISTS
+                        idx_live_measurements_psu_time
+                    ON live_test_measurements (
+                        psu_idx,
+                        measured_at_ms
+                    );
+
+
+                    CREATE TABLE IF NOT EXISTS
+                        test_sessions
+                    (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                        psu_idx INTEGER NOT NULL,
+                        psu_label TEXT NOT NULL,
+
+                        etr_number TEXT NOT NULL,
+                        technician TEXT NOT NULL,
+
+                        started_at_ms INTEGER,
+                        completed_at_ms INTEGER NOT NULL,
+
+                        target_hrs REAL NOT NULL,
+                        hours_elapsed REAL NOT NULL,
+                        progress_pct REAL NOT NULL,
+
+                        required_voltage REAL,
+                        required_current REAL,
+
+                        calibrated_voltage REAL,
+                        calibrated_current REAL,
+
+                        avg_voltage_v REAL,
+                        avg_current_a REAL,
+                        avg_temp_c REAL,
+
+                        final_notes TEXT NOT NULL DEFAULT '',
+                        created_at_ms INTEGER NOT NULL
+                    );
+
+                    CREATE INDEX IF NOT EXISTS
+                        idx_test_sessions_completed
+                    ON test_sessions (
+                        completed_at_ms DESC
+                    );
+
+                    CREATE INDEX IF NOT EXISTS
+                        idx_test_sessions_etr
+                    ON test_sessions (
+                        etr_number
+                    );
+
+                    CREATE INDEX IF NOT EXISTS
+                        idx_test_sessions_technician
+                    ON test_sessions (
+                        technician
+                    );
+
+
+                    CREATE TABLE IF NOT EXISTS
+                        test_measurements
+                    (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                        test_session_id INTEGER NOT NULL,
+                        measured_at_ms INTEGER NOT NULL,
+
+                        voltage_v REAL,
+                        current_a REAL,
+                        chamber_temp_c REAL,
+
+                        output_on INTEGER NOT NULL DEFAULT 0,
+                        psu_online INTEGER NOT NULL DEFAULT 0,
+                        psu_fault INTEGER NOT NULL DEFAULT 0,
+
+                        FOREIGN KEY (test_session_id)
+                            REFERENCES test_sessions(id)
+                            ON DELETE CASCADE
+                    );
+
+                    CREATE INDEX IF NOT EXISTS
+                        idx_test_measurements_session_time
+                    ON test_measurements (
+                        test_session_id,
+                        measured_at_ms
+                    );
+
+                    CREATE TABLE IF NOT EXISTS events (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        created_at_ms INTEGER NOT NULL,
+                        severity TEXT NOT NULL DEFAULT 'INFO',
+                        message TEXT NOT NULL,
+                        psu_idx INTEGER,
+                        etr_number TEXT
+                    );
+
+                    CREATE INDEX IF NOT EXISTS
+                        idx_events_created_at
+                    ON events (
+                        created_at_ms DESC
+                    );
+
+                    CREATE INDEX IF NOT EXISTS
+                        idx_events_psu
+                    ON events (
+                        psu_idx,
+                        created_at_ms DESC
+                    );
+
+                    """
+                )
+
+    @staticmethod
+    def _datetime_to_ms(
+        value: datetime.datetime | None,
+    ) -> int | None:
+        if value is None:
+            return None
+
+        if not isinstance(
+            value,
+            datetime.datetime,
+        ):
+            raise TypeError(
+                "Expected datetime.datetime or None."
+            )
+
+        return int(value.timestamp() * 1000)
+
+    @staticmethod
+    def _ms_to_datetime_text(
+        value: int | None,
+    ) -> str | None:
+        if value is None:
+            return None
+
+        return datetime.datetime.fromtimestamp(
+            value / 1000
+        ).isoformat(
+            timespec="seconds"
+        )
+
+    def test_connection(self) -> bool:
+        """Verify that the SQLite database is accessible."""
+
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT 1 AS result"
+            ).fetchone()
+
+        return bool(
+            row is not None
+            and row["result"] == 1
+        )
+
+    def save_live_state(self, psus) -> None:
+        """Create or update the database record for every active test."""
+
+        now_ms = int(
+            datetime.datetime.now().timestamp() * 1000
+        )
+
+        query = """
+            INSERT INTO live_test_sessions (
+                psu_idx,
+                psu_label,
+                etr_number,
+                technician,
+                started_at_ms,
+                target_hrs,
+                hours_elapsed,
+                progress_pct,
+                required_voltage,
+                required_current,
+                calibrated_voltage,
+                calibrated_current,
+                calibration_complete,
+                output_on,
+                psu_online,
+                psu_fault,
+                notes,
+                updated_at_ms
+            )
+            VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            ON CONFLICT(psu_idx) DO UPDATE SET
+                psu_label = excluded.psu_label,
+                etr_number = excluded.etr_number,
+                technician = excluded.technician,
+                started_at_ms = excluded.started_at_ms,
+                target_hrs = excluded.target_hrs,
+                hours_elapsed = excluded.hours_elapsed,
+                progress_pct = excluded.progress_pct,
+                required_voltage = excluded.required_voltage,
+                required_current = excluded.required_current,
+                calibrated_voltage = excluded.calibrated_voltage,
+                calibrated_current = excluded.calibrated_current,
+                calibration_complete =
+                    excluded.calibration_complete,
+                output_on = excluded.output_on,
+                psu_online = excluded.psu_online,
+                psu_fault = excluded.psu_fault,
+                notes = excluded.notes,
+                updated_at_ms = excluded.updated_at_ms
+        """
+
+        rows = []
+
+        for psu in psus:
+            if not psu.test_active:
+                continue
+
+            rows.append(
+                (
+                    psu.idx,
+                    f"PSU{psu.idx + 1}",
+                    psu.etr_number,
+                    psu.technician,
+                    self._datetime_to_ms(
+                        psu.test_start_dt
+                    ),
+                    float(psu.target_hrs),
+                    float(psu.hours_elapsed),
+                    float(psu.progress_pct),
+                    psu.set_voltage,
+                    psu.set_current,
+                    psu.calibrated_voltage,
+                    psu.calibrated_current,
+                    int(psu.calibration_complete),
+                    int(psu.power_on),
+                    int(psu.online),
+                    int(psu.fault),
+                    psu.notes or "",
+                    now_ms,
+                )
+            )
+
+        if not rows:
+            return
+
+        with self._write_lock:
+            with self._connection() as connection:
+                connection.executemany(
+                    query,
+                    rows,
+                )
+
+    def load_live_state(self) -> list:
+    #Load all ongoing tests for application recovery
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    psu_idx,
+                    etr_number,
+                    technician,
+                    started_at_ms,
+                    target_hrs,
+                    hours_elapsed,
+                    required_voltage,
+                    required_current,
+                    calibrated_voltage,
+                    calibrated_current,
+                    calibration_complete,
+                    output_on,
+                    psu_online,
+                    psu_fault,
+                    notes
+                FROM live_test_sessions
+                ORDER BY psu_idx
+                """
+            ).fetchall()
+
+        saved_states = []
+
+        for row in rows:
+            test_start_dt = self._ms_to_datetime_text(
+                row["started_at_ms"]
+            )
+
+            saved_states.append(
                 {
-                    "psu": f"PSU{p.idx + 1}",
-                    "etr": p.etr_number,
-                    "technician": p.technician,
-                    "hours": round(p.hours_elapsed, 4),
-                    "target_hrs": p.target_hrs,
-                    "voltage_v": p.voltage_v,
-                    "current_a": p.current_a,
-                    "status": p.status_str,
-                    "notes": p.notes,
+                    "psu_idx": row["psu_idx"],
+                    "etr_number": row["etr_number"],
+                    "technician": row["technician"],
+                    "target_hrs": row["target_hrs"],
+                    "hours_elapsed": row[
+                        "hours_elapsed"
+                    ],
+                    "set_voltage": row[
+                        "required_voltage"
+                    ],
+                    "set_current": row[
+                        "required_current"
+                    ],
+                    "calibrated_voltage": row[
+                        "calibrated_voltage"
+                    ],
+                    "calibrated_current": row[
+                        "calibrated_current"
+                    ],
+                    "calibration_complete": bool(
+                        row["calibration_complete"]
+                    ),
+                    "test_active": True,
+                    "test_start_dt": test_start_dt,
+                    "notes": row["notes"] or "",
+                    "power_on": bool(row["output_on"]),
+                    "online": bool(row["psu_online"]),
+                    "fault": bool(row["psu_fault"]),
                 }
-                for p in psus
-            ],
-        }
-        with open(fpath, "w") as f:
-            json.dump(snap, f, indent=2, default=str)
-        return fpath
+            )
 
+        return saved_states
 
-# ══════════════════════════════════════════════════════════════════
-#  DATA MODEL
-# ══════════════════════════════════════════════════════════════════
+    def buffer_live_measurement(
+        self,
+        psu,
+        chamber,
+        measured_at: datetime.datetime,
+    ) -> None:
+        """Buffer one measurement sample for an ongoing test."""
+
+        if not psu.test_active:
+            return
+
+        chamber_temperature = None
+
+        if chamber.online:
+            chamber_temperature = float(
+                chamber.temp_c
+            )
+
+        measurement = (
+            int(psu.idx),
+            self._datetime_to_ms(measured_at),
+            float(psu.voltage_v),
+            float(psu.current_a),
+            chamber_temperature,
+            int(bool(psu.power_on)),
+            int(bool(psu.online)),
+            int(bool(psu.fault)),
+        )
+
+        with self._write_lock:
+            self._measurement_buffer.append(
+                measurement
+            )
+
+    def flush_measurement_buffer(self) -> int:
+        """Write all buffered measurements in one transaction."""
+
+        with self._write_lock:
+            if not self._measurement_buffer:
+                return 0
+
+            pending_rows = list(
+                self._measurement_buffer
+            )
+
+            self._measurement_buffer.clear()
+
+            try:
+                with self._connection() as connection:
+                    connection.executemany(
+                        """
+                        INSERT INTO live_test_measurements (
+                            psu_idx,
+                            measured_at_ms,
+                            voltage_v,
+                            current_a,
+                            chamber_temp_c,
+                            output_on,
+                            psu_online,
+                            psu_fault
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        pending_rows,
+                    )
+
+            except Exception:
+                # Put the samples back if the database write fails.
+                self._measurement_buffer[0:0] = (
+                    pending_rows
+                )
+                raise
+
+        return len(pending_rows)
+
+    def get_live_measurements(
+        self,
+        psu_idx: int,
+        limit: int,
+    ) -> list:
+        """Return recent live samples in chronological order."""
+
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    measured_at_ms,
+                    voltage_v,
+                    current_a,
+                    chamber_temp_c,
+                    output_on,
+                    psu_online,
+                    psu_fault
+                FROM (
+                    SELECT
+                        measured_at_ms,
+                        voltage_v,
+                        current_a,
+                        chamber_temp_c,
+                        output_on,
+                        psu_online,
+                        psu_fault
+                    FROM live_test_measurements
+                    WHERE psu_idx = ?
+                    ORDER BY measured_at_ms DESC
+                    LIMIT ?
+                )
+                ORDER BY measured_at_ms ASC
+                """,
+                (
+                    int(psu_idx),
+                    int(limit),
+                ),
+            ).fetchall()
+
+        measurements = []
+
+        for row in rows:
+            measurements.append(
+                {
+                    "measured_at": (
+                        datetime.datetime.fromtimestamp(
+                            row["measured_at_ms"]
+                            / 1000
+                        )
+                    ),
+                    "voltage_v": row["voltage_v"],
+                    "current_a": row["current_a"],
+                    "chamber_temp_c": (
+                        row["chamber_temp_c"]
+                    ),
+                    "output_on": bool(
+                        row["output_on"]
+                    ),
+                    "psu_online": bool(
+                        row["psu_online"]
+                    ),
+                    "psu_fault": bool(
+                        row["psu_fault"]
+                    ),
+                }
+            )
+
+        return measurements
+
+    def append_event(self, event) -> int:
+        """Store one application event in SQLite."""
+
+        if isinstance(event, dict):
+            message = str(
+                event.get("message")
+                or event.get("text")
+                or ""
+            )
+
+            severity = str(
+                event.get("severity")
+                or event.get("level")
+                or "INFO"
+            ).upper()
+
+            psu_idx = event.get("psu_idx")
+            etr_number = event.get("etr_number")
+
+            event_time = (
+                event.get("timestamp")
+                or event.get("created_at")
+                or datetime.datetime.now()
+            )
+
+        else:
+            message = str(event)
+            severity = "INFO"
+            psu_idx = None
+            etr_number = None
+            event_time = datetime.datetime.now()
+
+        if not message:
+            raise ValueError(
+                "Cannot save an event without a message."
+            )
+
+        if isinstance(event_time, datetime.datetime):
+            created_at_ms = self._datetime_to_ms(
+                event_time
+            )
+
+        elif isinstance(event_time, (int, float)):
+            created_at_ms = int(event_time)
+
+        elif isinstance(event_time, str):
+            try:
+                parsed_time = (
+                    datetime.datetime.fromisoformat(
+                        event_time
+                    )
+                )
+                created_at_ms = self._datetime_to_ms(
+                    parsed_time
+                )
+
+            except ValueError:
+                created_at_ms = self._datetime_to_ms(
+                    datetime.datetime.now()
+                )
+
+        else:
+            created_at_ms = self._datetime_to_ms(
+                datetime.datetime.now()
+            )
+
+        with self._write_lock:
+            with self._connection() as connection:
+                cursor = connection.execute(
+                    """
+                    INSERT INTO events (
+                        created_at_ms,
+                        severity,
+                        message,
+                        psu_idx,
+                        etr_number
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        created_at_ms,
+                        severity,
+                        message,
+                        psu_idx,
+                        etr_number,
+                    ),
+                )
+
+                return int(cursor.lastrowid)
+
+    def get_events(
+        self,
+        limit: int = 500,
+    ) -> list:
+        """Return the latest application events."""
+
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    created_at_ms,
+                    severity,
+                    message,
+                    psu_idx,
+                    etr_number
+                FROM events
+                ORDER BY created_at_ms DESC, id DESC
+                LIMIT ?
+                """,
+                (int(limit),),
+            ).fetchall()
+
+        events = []
+
+        for row in reversed(rows):
+            events.append(
+                {
+                    "id": row["id"],
+                    "timestamp": (
+                        self._ms_to_datetime_text(
+                            row["created_at_ms"]
+                        )
+                    ),
+                    "severity": row["severity"],
+                    "message": row["message"],
+                    "psu_idx": row["psu_idx"],
+                    "etr_number": row["etr_number"],
+                }
+            )
+
+        return events

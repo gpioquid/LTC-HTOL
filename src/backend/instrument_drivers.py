@@ -21,11 +21,15 @@ _psu_connections: list[Any | None] = [None] * NUM_PSU
 # Prevent simultaneous polling and control commands on the same PSU.
 _psu_locks = [threading.RLock() for _ in range(NUM_PSU)]
 
+_psu_driver_closing = False
 
 def connect_psus() -> list:
     """Connect to all configured PSUs."""
 
     global _resource_manager
+    global _psu_driver_closing
+
+    _psu_driver_closing = False
 
     _resource_manager = pyvisa.ResourceManager()
 
@@ -59,43 +63,68 @@ def connect_psus() -> list:
 
 
 def disconnect_psus() -> None:
-    """Close all PSU connections and the VISA resource manager"""
-
     global _resource_manager
+    global _psu_driver_closing
 
-    for idx, instrument in enumerate(_psu_connections):
-        if instrument is None:
-            continue
+    # Prevent new reads before closing any sessions.
+    _psu_driver_closing = True
 
-        try:
-            # for safety behavior
+    for idx in range(NUM_PSU):
+        psu_lock = _psu_locks[idx]
 
-            instrument.close()
-            print(f"PSU {idx + 1} disconnected")
+        with psu_lock:
+            instrument = _psu_connections[idx]
 
-        except pyvisa.Error as exc:
-            print(f" PSU {idx + 1} disconnect error: {exc}")
+            if instrument is None:
+                continue
 
-        finally:
-            _psu_connections[idx] = None
+            try:
+                instrument.close()
+
+                print(
+                    f"PSU {idx + 1} disconnected"
+                )
+
+            except pyvisa.Error as error:
+                print(
+                    f"PSU {idx + 1} disconnect "
+                    f"error: {error}"
+                )
+
+            finally:
+                _psu_connections[idx] = None
 
     if _resource_manager is not None:
         try:
             _resource_manager.close()
-            print("VISA resource manager closed")
 
-        except pyvisa.Error as exc:
-            print(f"VISA reousce manager close error: {exc}")
+            print(
+                "VISA resource manager closed"
+            )
+
+        except pyvisa.Error as error:
+            print(
+                "VISA resource manager close "
+                f"error: {error}"
+            )
 
         finally:
             _resource_manager = None
 
-
 def psu_read(idx: int) -> dict:
-    """Read actual PSU measurements and output state."""
+    if _psu_driver_closing:
+        return {
+            "online": False,
+            "power_on": False,
+            "voltage_v": 0.0,
+            "current_a": 0.0,
+            "fault": False,
+        }
 
     if not 0 <= idx < NUM_PSU:
-        raise IndexError(f"Invalid PSU index: {idx}")
+        raise IndexError(
+            f"Invalid PSU index: {idx}"
+        )
 
     instrument = _psu_connections[idx]
 
@@ -112,37 +141,49 @@ def psu_read(idx: int) -> dict:
 
     try:
         with psu_lock:
-            voltage_response = instrument.query("MEASure:VOLTage?").strip()
+            if _psu_driver_closing:
+                return {
+                    "online": False,
+                    "power_on": False,
+                    "voltage_v": 0.0,
+                    "current_a": 0.0,
+                    "fault": False,
+                }
 
-            current_response = instrument.query("MEASure:CURRent?").strip()
+            voltage = float(
+                instrument.query(
+                    "MEASure:VOLTage?"
+                ).strip()
+            )
 
-            output_response = instrument.query("OUTPut:STATe?").strip().upper()
+            current = float(
+                instrument.query(
+                    "MEASure:CURRent?"
+                ).strip()
+            )
 
         return {
             "online": True,
-            "power_on": output_response in {"1", "ON"},
-            "voltage_v": round(
-                float(voltage_response),
-                3,
-            ),
-            "current_a": round(
-                float(current_response),
-                3,
-            ),
+            "power_on": voltage > 0.01,
+            "voltage_v": round(voltage, 3),
+            "current_a": round(current, 3),
             "fault": False,
         }
 
     except (pyvisa.Error, ValueError) as error:
-        print(f"PSU {idx + 1} read failed: {error}")
+        if not _psu_driver_closing:
+            print(
+                f"PSU {idx + 1} read failed: "
+                f"{error}"
+            )
 
         return {
             "online": False,
             "power_on": False,
             "voltage_v": 0.0,
             "current_a": 0.0,
-            "fault": True,
+            "fault": not _psu_driver_closing,
         }
-
 
 def psu_set_output(
     idx: int,
