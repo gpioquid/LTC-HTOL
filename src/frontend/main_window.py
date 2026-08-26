@@ -401,7 +401,6 @@ class HTOLMonitor(QMainWindow):
     def _connect_widget_signals(self):
         # Header
         self.header_widget.history_requested.connect(self._open_history)
-        self.header_widget.export_requested.connect(self._export_snapshot)
 
         # PSU actions
         self.psu_panel_widget.test_toggled.connect(self._toggle_test)
@@ -859,28 +858,6 @@ class HTOLMonitor(QMainWindow):
     # ==========================================================
     # Export and persistence
     # ==========================================================
-
-    def _export_snapshot(self):
-        try:
-            path = self.store.export_snapshot(
-                self.psus,
-                self.chamber.temp_c,
-            )
-
-            self._log(f"Snapshot exported: {path}")
-
-            QMessageBox.information(
-                self,
-                "Export Complete",
-                f"Snapshot saved:\n{path}",
-            )
-
-        except Exception as error:
-            QMessageBox.critical(
-                self,
-                "Export Failed",
-                f"Unable to export snapshot:\n{error}",
-            )
 
     def _auto_save(self):
         threading.Thread(

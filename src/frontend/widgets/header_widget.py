@@ -19,7 +19,6 @@ from src.frontend.widgets.common import (
 
 class HeaderWidget(QFrame):
     history_requested = Signal()
-    export_requested = Signal()
 
     def __init__(self, num_psu, parent=None):
         super().__init__(parent)
@@ -62,11 +61,6 @@ class HeaderWidget(QFrame):
         history_button.setStyleSheet(button_style(C["purple"]))
         history_button.clicked.connect(self.history_requested.emit)
 
-        export_button = QPushButton("EXPORT")
-        export_button.setToolTip("Export a snapshot of the current test state")
-        export_button.setStyleSheet(button_style(C["cyan"]))
-        export_button.clicked.connect(self.export_requested.emit)
-
         self.active_label = create_label(
             f"ACTIVE  0/{num_psu}",
             FMB,
@@ -88,7 +82,6 @@ class HeaderWidget(QFrame):
         )
 
         layout.addWidget(history_button)
-        layout.addWidget(export_button)
         layout.addSpacing(8)
         layout.addWidget(self.active_label)
         layout.addWidget(self.fault_label)
