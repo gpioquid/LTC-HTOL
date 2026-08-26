@@ -18,9 +18,10 @@ from PySide6.QtWidgets import (
 
 from src.backend.data_repository import DataRepository
 from src.backend.instrument_drivers import (
-    psu_read,
-    thermocouple_read,
     disconnect_psus,
+    psu_read,
+    psu_set_power,
+    thermocouple_read,
 )
 from src.backend.state_models import (
     ChamberState,
@@ -79,11 +80,13 @@ DB_BATCH_FLUSH_SECONDS = float(
     )
 )
 
-
 class Bus(QObject):
     fetched = Signal(object)
     error = Signal(str)
 
+    # Sends the completed open-fuse event back to
+    # the main Qt UI thread.
+    open_fuse_detected = Signal(object)
 
 class HTOLMonitor(QMainWindow):
     def __init__(self):
@@ -96,7 +99,29 @@ class HTOLMonitor(QMainWindow):
         self._main_splitter_sizes = [1000, 650]
         self._right_splitter_sizes = [560, 240]
 
-        self.psus = [PSUState(index) for index in range(NUM_PSU)]
+        self.psus = [
+            PSUState(index)
+            for index in range(NUM_PSU)
+        ]
+
+        # Open-fuse detection runtime state.
+        self._open_fuse_low_current_counts = {
+            psu.idx: 0
+            for psu in self.psus
+        }
+
+        self._open_fuse_monitor_started_at = {
+            psu.idx: None
+            for psu in self.psus
+        }
+
+        self._open_fuse_handling: set[int] = set()
+
+        self._restore_message = None
+        self.chamber = ChamberState()
+        self.store = DataRepository()
+
+
         self._restore_message = None
         self.chamber = ChamberState()
         self.store = DataRepository()
@@ -123,6 +148,10 @@ class HTOLMonitor(QMainWindow):
         self.bus.fetched.connect(self.update_ui)
         self.bus.error.connect(self._handle_polling_error)
 
+        self.bus.open_fuse_detected.connect(
+            self._on_open_fuse_detected
+        )
+
         #self._restore_live_state()
         self._build_ui()
         self._connect_widget_signals()
@@ -144,6 +173,16 @@ class HTOLMonitor(QMainWindow):
         psu.test_active = True
         psu.power_on = True
 
+        # Arm open-fuse monitoring for this test.
+        self._open_fuse_low_current_counts[index] = 0
+
+        self._open_fuse_monitor_started_at[index] = (
+            datetime.datetime.now()
+        )
+
+        self._open_fuse_handling.discard(index)
+
+
         if psu.test_start_dt is None:
             psu.test_start_dt = (
                 datetime.datetime.now()
@@ -156,6 +195,10 @@ class HTOLMonitor(QMainWindow):
 
         except Exception as error:
             psu.test_active = False
+
+            self._open_fuse_low_current_counts[index] = 0
+            self._open_fuse_monitor_started_at[index] = None
+            self._open_fuse_handling.discard(index)
 
             QMessageBox.critical(
                 self,
@@ -660,6 +703,11 @@ class HTOLMonitor(QMainWindow):
         psu.calibrated_voltage = None
         psu.calibrated_current = None
 
+        # Reset open-fuse monitoring for the completed test.
+        self._open_fuse_low_current_counts[index] = 0
+        self._open_fuse_monitor_started_at[index] = None
+        self._open_fuse_handling.discard(index)
+
         # Keep the required configuration if you want the completed
         # values visible until the next test setup.
         #
@@ -935,6 +983,7 @@ class HTOLMonitor(QMainWindow):
         finally:
             self._fetch_lock.release()
 
+
     def _fetch_psu_readings(
         self,
         now: datetime.datetime,
@@ -948,23 +997,49 @@ class HTOLMonitor(QMainWindow):
             if self._closing:
                 return
 
-            psu.online = reading["online"]
-            psu.power_on = reading["power_on"]
-            psu.voltage_v = reading["voltage_v"]
-            psu.current_a = reading["current_a"]
+            psu.online = bool(
+                reading["online"]
+            )
+
+            psu.power_on = bool(
+                reading["power_on"]
+            )
+
+            psu.voltage_v = float(
+                reading["voltage_v"]
+            )
+
+            psu.current_a = float(
+                reading["current_a"]
+            )
 
             psu.current_hist.append(
                 psu.current_a
             )
+
             psu.voltage_hist.append(
                 psu.voltage_v
             )
+
             psu.time_hist.append(now)
 
-            self._sample_active_test(
+            # Check the latest measured current for a
+            # sustained open-fuse condition.
+            self._check_open_fuse(
                 psu,
                 now,
             )
+
+            # The open-fuse handler may have stopped the test.
+            # Buffer the measurement only if the test remains active.
+            if psu.test_active:
+                self._sample_active_test(
+                    psu,
+                    now,
+                )
+
+
+
     def _fetch_chamber_reading(self, now):
         reading = thermocouple_read()
 
@@ -1088,3 +1163,332 @@ class HTOLMonitor(QMainWindow):
         disconnect_psus()
 
         event.accept()
+
+    def _check_open_fuse(
+        self,
+        psu,
+        now: datetime.datetime,
+    ) -> None:
+        """
+        Detect sustained near-zero measured current during testing.
+
+        The detector is disabled:
+        - When no test is active
+        - When the PSU is offline
+        - When the PSU output is off
+        - During the startup grace period
+        """
+
+        index = psu.idx
+
+        if not psu.test_active:
+            self._open_fuse_low_current_counts[index] = 0
+            self._open_fuse_monitor_started_at[index] = None
+            self._open_fuse_handling.discard(index)
+            return
+
+        if not psu.online or not psu.power_on:
+            self._open_fuse_low_current_counts[index] = 0
+            return
+
+        if index in self._open_fuse_handling:
+            return
+
+        monitor_started_at = (
+            self._open_fuse_monitor_started_at[index]
+        )
+
+        if monitor_started_at is None:
+            self._open_fuse_monitor_started_at[index] = now
+            self._open_fuse_low_current_counts[index] = 0
+            return
+
+        elapsed_seconds = (
+            now - monitor_started_at
+        ).total_seconds()
+
+        if (
+            elapsed_seconds
+            < OPEN_FUSE_STARTUP_GRACE_SECONDS
+        ):
+            self._open_fuse_low_current_counts[index] = 0
+            return
+
+        try:
+            measured_current = float(
+                psu.current_a
+            )
+
+        except (TypeError, ValueError):
+            self._open_fuse_low_current_counts[index] = 0
+            return
+
+        is_low_current = (
+            abs(measured_current)
+            <= OPEN_FUSE_CURRENT_THRESHOLD_A
+        )
+
+        if not is_low_current:
+            self._open_fuse_low_current_counts[index] = 0
+            return
+
+        self._open_fuse_low_current_counts[index] += 1
+
+        low_current_count = (
+            self._open_fuse_low_current_counts[index]
+        )
+
+        print(
+            f"PSU {index + 1}: possible open fuse, "
+            f"measured current="
+            f"{measured_current * 1000:.3f} mA, "
+            f"confirmation "
+            f"{low_current_count}/"
+            f"{OPEN_FUSE_CONSECUTIVE_POLLS}"
+        )
+
+        if (
+            low_current_count
+            < OPEN_FUSE_CONSECUTIVE_POLLS
+        ):
+            return
+
+        # Prevent another polling cycle from handling the
+        # same open-fuse condition again.
+        self._open_fuse_handling.add(index)
+
+        self._handle_open_fuse(
+            psu=psu,
+            measured_current=measured_current,
+            detected_at=now,
+        )
+
+    def _handle_open_fuse(
+        self,
+        psu,
+        measured_current: float,
+        detected_at: datetime.datetime,
+    ) -> None:
+        """
+        Immediately disable the PSU and archive the interrupted
+        test after a confirmed open-fuse condition.
+
+        This method runs in the polling worker thread.
+        """
+
+        index = psu.idx
+
+        self._log_open_fuse_to_terminal(
+            index=index,
+            measured_current=measured_current,
+        )
+
+        shutdown_error = None
+        test_session_id = None
+
+        try:
+            # Abort any active current ramp and turn the
+            # physical PSU output OFF immediately.
+            psu_set_power(
+                index,
+                False,
+            )
+
+        except Exception as error:
+            shutdown_error = str(error)
+
+            print(
+                f"PSU {index + 1}: output shutdown "
+                f"could not be confirmed: {error}"
+            )
+
+        # Update runtime state immediately so another polling
+        # cycle cannot treat the channel as actively testing.
+        psu.power_on = False
+
+        final_notes = (
+            "TEST AUTOMATICALLY STOPPED: OPEN FUSE DETECTED. "
+            f"Measured current remained within "
+            f"+/-{OPEN_FUSE_CURRENT_THRESHOLD_A * 1000:.0f} mA "
+            f"for {OPEN_FUSE_CONSECUTIVE_POLLS} consecutive "
+            "polling cycles. "
+            f"Detected at "
+            f"{detected_at.strftime('%Y-%m-%d %H:%M:%S')}. "
+            f"Final measured current: "
+            f"{measured_current * 1000:.3f} mA."
+        )
+
+        if shutdown_error is not None:
+            final_notes += (
+                " Warning: physical PSU output shutdown "
+                f"could not be confirmed. {shutdown_error}"
+            )
+
+        try:
+            # Save the latest session values before moving
+            # the test into permanent history.
+            self.store.save_live_state(
+                self.psus
+            )
+
+            # Write measurements still waiting in RAM.
+            self.store.flush_measurement_buffer()
+
+            # Move the interrupted live test into Test History.
+            test_session_id = (
+                self.store.finalize_live_test(
+                    psu_idx=index,
+                    final_notes=final_notes,
+                )
+            )
+
+        except Exception as error:
+            print(
+                f"PSU {index + 1}: unable to archive "
+                f"the open-fuse test: {error}"
+            )
+
+            final_notes += (
+                " Database archival failed: "
+                f"{error}"
+            )
+
+        event_data = {
+            "psu_idx": index,
+            "test_session_id": test_session_id,
+            "etr_number": psu.etr_number,
+            "technician": psu.technician,
+            "hours_elapsed": psu.hours_elapsed,
+            "target_hrs": psu.target_hrs,
+            "measured_current": measured_current,
+            "detected_at": detected_at,
+            "notes": final_notes,
+            "shutdown_error": shutdown_error,
+        }
+
+        try:
+            self.bus.open_fuse_detected.emit(
+                event_data
+            )
+
+        except RuntimeError:
+            # The application may be closing while the worker
+            # is finishing.
+            if not self._closing:
+                raise
+
+    def _on_open_fuse_detected(
+        self,
+        event_data: dict,
+    ) -> None:
+        """
+        Update the UI after open-fuse shutdown.
+
+        This method runs on the main Qt UI thread.
+        """
+
+        index = int(
+            event_data["psu_idx"]
+        )
+
+        psu = self.psus[index]
+
+        measured_current = float(
+            event_data["measured_current"]
+        )
+
+        # Return the channel to idle.
+        psu.test_active = False
+        psu.calibration_active = False
+        psu.calibration_complete = False
+        psu.test_start_dt = None
+        psu.power_on = False
+        psu.hours_elapsed = 0.0
+        psu.last_db_sample_dt = None
+
+        psu.calibrated_voltage = None
+        psu.calibrated_current = None
+
+        # Reset detector state for the next test.
+        self._open_fuse_low_current_counts[index] = 0
+        self._open_fuse_monitor_started_at[index] = None
+        self._open_fuse_handling.discard(index)
+
+        channel = (
+            self.psu_panel_widget
+            .channel_widgets[index]
+        )
+
+        channel.update_state(psu)
+
+        self._log(
+            f"OPEN FUSE DETECTED  "
+            f"PSU{index + 1}  "
+            f"ETR:{event_data.get('etr_number', '—')}  "
+            f"Current:"
+            f"{measured_current * 1000:.3f} mA  "
+            "OUTPUT OFF  TEST STOPPED"
+        )
+
+        test_session_id = event_data.get(
+            "test_session_id"
+        )
+
+        if test_session_id is None:
+            history_message = (
+                "The test could not be archived into "
+                "Test History. Check the terminal and "
+                "database logs."
+            )
+        else:
+            history_message = (
+                "The interrupted test was archived in "
+                "Test History."
+            )
+
+        shutdown_error = event_data.get(
+            "shutdown_error"
+        )
+
+        if shutdown_error:
+            shutdown_message = (
+                "\n\nWarning: physical output shutdown "
+                "could not be confirmed:\n"
+                f"{shutdown_error}"
+            )
+        else:
+            shutdown_message = (
+                "\n\nThe PSU output was turned OFF."
+            )
+
+        QMessageBox.critical(
+            self,
+            "Open Fuse Detected",
+            (
+                f"PSU {index + 1} measured approximately "
+                "zero current during an active test.\n\n"
+                f"Measured current: "
+                f"{measured_current * 1000:.3f} mA\n"
+                f"Threshold: "
+                f"+/-"
+                f"{OPEN_FUSE_CURRENT_THRESHOLD_A * 1000:.0f} mA\n"
+                f"Confirmation: "
+                f"{OPEN_FUSE_CONSECUTIVE_POLLS} "
+                "consecutive polls"
+                f"{shutdown_message}\n\n"
+                f"{history_message}\n\n"
+                "The machine has returned to IDLE."
+            ),
+        )
+
+
+    @staticmethod
+    def _log_open_fuse_to_terminal(
+        index: int,
+        measured_current: float,
+    ) -> None:
+        print(
+            f"PSU {index + 1}: OPEN FUSE DETECTED, "
+            f"measured current="
+            f"{measured_current * 1000:.3f} mA"
+        )
