@@ -699,7 +699,6 @@ class PSUCalibrationPopup(QDialog):
         # commands have completed successfully.
         self.psu.online = True
         self.psu.power_on = True
-        self.psu.fault = False
 
         self.psu.calibration_active = False
         self.psu.calibration_complete = True
@@ -2700,7 +2699,6 @@ class CompletedTestDetailDialog(QDialog):
                         "CHAMBER_TEMP_C",
                         "OUTPUT_ON",
                         "PSU_ONLINE",
-                        "PSU_FAULT",
                     ]
                 )
 
@@ -2752,14 +2750,6 @@ class CompletedTestDetailDialog(QDialog):
                                 bool(
                                     measurement.get(
                                         "psu_online",
-                                        False,
-                                    )
-                                )
-                            ),
-                            int(
-                                bool(
-                                    measurement.get(
-                                        "psu_fault",
                                         False,
                                     )
                                 )
@@ -2816,14 +2806,10 @@ class TestHistoryPopup(QDialog):
         )
         self.table.setHorizontalHeaderLabels(["DATE", "ETR #", "TECHNICIAN", "DURATION"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.itemSelectionChanged.connect(self.show_detail)
         self.table.itemDoubleClicked.connect(
             self.open_test_detail
         )
         root.addWidget(self.table, 2)
-        self.detail = QPlainTextEdit()
-        self.detail.setReadOnly(True)
-        root.addWidget(self.detail, 1)
         self.load()
 
     def load(self):
@@ -2949,41 +2935,6 @@ class TestHistoryPopup(QDialog):
         )
 
         dialog.exec()
-
-    def show_detail(self) -> None:
-        row_index = self.table.currentRow()
-
-        if row_index < 0:
-            return
-
-        if row_index >= len(self.filtered):
-            return
-
-        record = self.filtered[row_index]
-
-        excluded_fields = {
-            "id",
-            "psu_idx",
-        }
-
-        lines = []
-
-        for key, value in record.items():
-            if key in excluded_fields:
-                continue
-
-            heading = (
-                key.replace("_", " ")
-                .title()
-            )
-
-            lines.append(
-                f"{heading:24}: {value}"
-            )
-
-        self.detail.setPlainText(
-            "\n".join(lines)
-        )
 
 
 class PSUControlPopup(QDialog):

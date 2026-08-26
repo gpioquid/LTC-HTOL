@@ -141,7 +141,6 @@ class PSUPanelWidget(QWidget):
 
     def update_channels(self, psus):
         active_count = 0
-        fault_count = 0
 
         for card, psu in zip(
             self.channel_widgets,
@@ -151,15 +150,11 @@ class PSUPanelWidget(QWidget):
             card.update_state(psu)
 
             active_count += int(psu.power_on)
-            fault_count += int(psu.fault)
 
-        suffix = "" if fault_count == 1 else "S"
 
-        self.summary_label.setText(
-            f"{active_count} ACTIVE  ·  {fault_count} FAULT{suffix}"
-        )
+      
 
-        return active_count, fault_count
+        return active_count
 
     def reset_channel(
         self,
