@@ -461,6 +461,76 @@ class DataRepository:
 
         return saved_states
 
+    def get_completed_tests(self):
+        """Return completed tests with the newest test first."""
+
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    psu_idx,
+                    psu_label,
+                    etr_number,
+                    technician,
+                    started_at_ms,
+                    completed_at_ms,
+                    target_hrs,
+                    hours_elapsed,
+                    progress_pct,
+                    required_voltage,
+                    required_current,
+                    calibrated_voltage,
+                    calibrated_current,
+                    avg_voltage_v,
+                    avg_current_a,
+                    avg_temp_c,
+                    final_notes
+                FROM test_sessions
+                ORDER BY completed_at_ms DESC, id DESC
+                """
+            ).fetchall()
+
+        records = []
+
+        for row in rows:
+            records.append(
+                {
+                    "id": row["id"],
+                    "psu_idx": row["psu_idx"],
+                    "psu_label": row["psu_label"],
+                    "etr_number": row["etr_number"],
+                    "technician": row["technician"],
+                    "started_at": self._ms_to_datetime_text(
+                        row["started_at_ms"]
+                    ),
+                    "completed_at": self._ms_to_datetime_text(
+                        row["completed_at_ms"]
+                    ),
+                    "target_hrs": row["target_hrs"],
+                    "hours_elapsed": row["hours_elapsed"],
+                    "progress_pct": row["progress_pct"],
+                    "required_voltage": row[
+                        "required_voltage"
+                    ],
+                    "required_current": row[
+                        "required_current"
+                    ],
+                    "calibrated_voltage": row[
+                        "calibrated_voltage"
+                    ],
+                    "calibrated_current": row[
+                        "calibrated_current"
+                    ],
+                    "avg_voltage_v": row["avg_voltage_v"],
+                    "avg_current_a": row["avg_current_a"],
+                    "avg_temp_c": row["avg_temp_c"],
+                    "notes": row["final_notes"] or "",
+                }
+            )
+
+        return records
+
     def buffer_live_measurement(
         self,
         psu,

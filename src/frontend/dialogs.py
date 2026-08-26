@@ -2114,14 +2114,14 @@ class TestHistoryPopup(QDialog):
         self.resize(1060, 700)
         root = QVBoxLayout(self)
         h = QHBoxLayout()
-        h.addWidget(label("◈ COMPLETED TEST HISTORY", FML, C["purple"]))
+        h.addWidget(label("COMPLETED TEST HISTORY", FML, C["purple"]))
         self.search = QLineEdit()
         self.search.setPlaceholderText("ETR #, Technician, or Date…")
         self.search.textChanged.connect(self.apply_filter)
         h.addWidget(self.search)
         root.addLayout(h)
         self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["DATE", "ETR #", "TECHNICIAN", "OUTCOME"])
+        self.table.setHorizontalHeaderLabels(["DATE", "ETR #", "TECHNICIAN", "DURATION"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.itemSelectionChanged.connect(self.show_detail)
         root.addWidget(self.table, 2)
@@ -2136,7 +2136,7 @@ class TestHistoryPopup(QDialog):
                 self.store.get_completed_tests()
             )
 
-        except sqlite3.Error as error:
+        except Exception as error:
             QMessageBox.critical(
                 self,
                 "Database Error",
@@ -2145,33 +2145,92 @@ class TestHistoryPopup(QDialog):
                     f"{error}"
                 ),
             )
-
             self.records = []
 
         self.apply_filter()
 
-    def apply_filter(self):
-        q = self.search.text().strip().lower()
+    def apply_filter(self) -> None:
+        query = (
+            self.search.text()
+            .strip()
+            .lower()
+        )
+
         self.filtered = [
-            r
-            for r in self.records
-            if not q
-            or any(
-                q in str(r.get(k, "")).lower()
-                for k in ("etr_number", "technician", "completed_at")
+            record
+            for record in self.records
+            if (
+                not query
+                or any(
+                    query in str(
+                        record.get(field, "")
+                        or ""
+                    ).lower()
+                    for field in (
+                        "etr_number",
+                        "technician",
+                        "completed_at",
+                    )
+                )
             )
         ]
-        self.table.setRowCount(len(self.filtered))
-        for i, r in enumerate(self.filtered):
-            for j, v in enumerate(
-                (
-                    r.get("completed_at", "—")[:10],
-                    r.get("etr_number", "—"),
-                    r.get("technician", "—"),
-                    r.get("outcome", "—"),
+
+        self.table.setRowCount(
+            len(self.filtered)
+        )
+
+        for row_index, record in enumerate(
+            self.filtered
+        ):
+            completed_at = (
+                record.get("completed_at")
+                or "—"
+            )
+
+            etr_number = (
+                record.get("etr_number")
+                or "—"
+            )
+
+            technician = (
+                record.get("technician")
+                or "—"
+            )
+
+            hours_elapsed = record.get(
+                "hours_elapsed",
+                0.0,
+            )
+
+            try:
+                duration_text = (
+                    f"{float(hours_elapsed):.2f} h"
                 )
+            except (TypeError, ValueError):
+                duration_text = "—"
+
+            values = (
+                str(completed_at)[:10],
+                str(etr_number),
+                str(technician),
+                duration_text,
+            )
+
+            for column_index, value in enumerate(
+                values
             ):
-                self.table.setItem(i, j, QTableWidgetItem(str(v)))
+                item = QTableWidgetItem(value)
+
+                if column_index in (0, 3):
+                    item.setTextAlignment(
+                        Qt.AlignmentFlag.AlignCenter
+                    )
+
+                self.table.setItem(
+                    row_index,
+                    column_index,
+                    item,
+                )
 
     def show_detail(self):
         i = self.table.currentRow()

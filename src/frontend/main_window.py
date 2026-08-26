@@ -20,6 +20,7 @@ from src.backend.data_repository import DataRepository
 from src.backend.instrument_drivers import (
     psu_read,
     thermocouple_read,
+    disconnect_psus,
 )
 from src.backend.state_models import (
     ChamberState,
