@@ -236,11 +236,12 @@ def psu_set_power(
     Turn the PSU output ON or OFF.
 
     ON:
-        Apply the final current limit, enable at 0 V,
-        then use the native Sorensen voltage ramp.
+        Set the target voltage immediately, enable the output
+        with a 0 A current setting, then use the native Sorensen
+        current ramp to reach target_current.
 
     OFF:
-        Abort any voltage ramp and disable immediately.
+        Abort any active current ramp and disable the output.
     """
 
     if not 0 <= idx < NUM_PSU:
@@ -261,7 +262,7 @@ def psu_set_power(
         with psu_lock:
             if not on:
                 instrument.write(
-                    "SOURce:VOLTage:RAMP:ABORt"
+                    "SOURce:CURRent:RAMP:ABORt"
                 )
                 instrument.write(
                     "OUTPut:STATe 0"
@@ -305,71 +306,126 @@ def psu_set_power(
                     "0.1 and 99.0 seconds."
                 )
 
-            # Cancel any old voltage-ramp configuration.
+            # Cancel any previous current ramp.
             instrument.write(
-                "SOURce:VOLTage:RAMP:ABORt"
+                "SOURce:CURRent:RAMP:ABORt"
             )
 
-            # Establish a controlled starting condition.
+            # Prepare the PSU while output is disabled.
             instrument.write(
                 "OUTPut:STATe 0"
             )
 
-            # Apply the final current limit before output ON.
+            # Apply the target voltage immediately.
             instrument.write(
-                f"SOURce:CURRent {current:.3f}"
+                f"SOURce:VOLTage {voltage:.3f}"
             )
 
-            # Set the starting voltage for the ramp.
+            # Establish the current-ramp starting point.
             instrument.write(
-                "SOURce:VOLTage 0"
+                "SOURce:CURRent 0"
             )
 
-            # Enable output at zero programmed voltage.
+            # Enable output at the zero-current setting.
             instrument.write(
                 "OUTPut:STATe 1"
             )
 
-            # Start the native voltage ramp.
+            # Start the native Sorensen current ramp.
             instrument.write(
-                "SOURce:VOLTage:RAMP "
-                f"{voltage:.3f} "
+                "SOURce:CURRent:RAMP "
+                f"{current:.3f} "
                 f"{duration:.1f}"
             )
 
+            # Check whether the SGX accepted the commands.
+            error_response = instrument.query(
+                "SYSTem:ERRor?"
+            ).strip()
+
+            error_code_text = (
+                error_response
+                .split(",", maxsplit=1)[0]
+                .strip()
+            )
+
+            try:
+                error_code = int(
+                    error_code_text
+                )
+            except ValueError:
+                error_code = None
+
+            if error_code != 0:
+                instrument.write(
+                    "SOURce:CURRent:RAMP:ABORt"
+                )
+                instrument.write(
+                    "OUTPut:STATe 0"
+                )
+
+                raise RuntimeError(
+                    "SGX rejected the current ramp: "
+                    f"{error_response}"
+                )
+
+            # Confirm that the physical output is enabled.
+            output_response = instrument.query(
+                "OUTPut:STATe?"
+            ).strip()
+
+            output_on = output_response.upper() in {
+                "1",
+                "ON",
+            }
+
+            if not output_on:
+                raise RuntimeError(
+                    "The SGX accepted the commands, "
+                    "but its output remains OFF."
+                )
+
+            # Normally returns 1 while the current ramp
+            # is running and 0 when completed.
+            ramp_status = instrument.query(
+                "SOURce:CURRent:RAMP?"
+            ).strip()
+
         print(
-            f"PSU {idx + 1}: output ON with "
-            f"native voltage ramp, "
-            f"0.000 V to {voltage:.3f} V in "
+            f"PSU {idx + 1}: native current ramp "
+            f"started, status={ramp_status}, "
+            f"0.000 A to {current:.3f} A in "
             f"{duration:.1f} s, "
-            f"current limit {current:.3f} A"
+            f"voltage target={voltage:.3f} V"
         )
 
         return True
 
-    except (
-        pyvisa.errors.VisaIOError,
-        ValueError,
-        TypeError,
-    ) as error:
+    except Exception as error:
         if on:
             try:
                 with psu_lock:
                     instrument.write(
-                        "SOURce:VOLTage:RAMP:ABORt"
+                        "SOURce:CURRent:RAMP:ABORt"
                     )
                     instrument.write(
                         "OUTPut:STATe 0"
                     )
 
-            except pyvisa.errors.VisaIOError:
-                pass
+            except Exception as shutdown_error:
+                print(
+                    f"PSU {idx + 1}: emergency "
+                    f"shutdown failed: "
+                    f"{shutdown_error}"
+                )
+
+        if isinstance(error, RuntimeError):
+            raise
 
         raise RuntimeError(
             f"Unable to control PSU {idx + 1} "
             f"output: {error}"
         ) from error
-
     
 def thermocouple_read() -> dict:
     """TODO: Replace with serial read from MCU."""
