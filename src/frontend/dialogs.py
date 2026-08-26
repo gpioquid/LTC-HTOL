@@ -2804,7 +2804,7 @@ class TestHistoryPopup(QDialog):
         self.table.setSelectionMode(
             QTableWidget.SelectionMode.SingleSelection
         )
-        self.table.setHorizontalHeaderLabels(["DATE", "ETR #", "TECHNICIAN", "DURATION"])
+        self.table.setHorizontalHeaderLabels([ "ETR #", "TECHNICIAN", "DURATION","DATE"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.itemDoubleClicked.connect(
             self.open_test_detail
@@ -2864,11 +2864,6 @@ class TestHistoryPopup(QDialog):
         for row_index, record in enumerate(
             self.filtered
         ):
-            completed_at = (
-                record.get("completed_at")
-                or "—"
-            )
-
             etr_number = (
                 record.get("etr_number")
                 or "—"
@@ -2884,6 +2879,11 @@ class TestHistoryPopup(QDialog):
                 0.0,
             )
 
+            completed_at = (
+                record.get("completed_at")
+                or "—"
+            )
+
             try:
                 duration_text = (
                     f"{float(hours_elapsed):.2f} h"
@@ -2891,11 +2891,13 @@ class TestHistoryPopup(QDialog):
             except (TypeError, ValueError):
                 duration_text = "—"
 
+            date_text = str(completed_at)[:10]
+
             values = (
-                str(completed_at)[:10],
                 str(etr_number),
                 str(technician),
                 duration_text,
+                date_text,
             )
 
             for column_index, value in enumerate(
@@ -2903,7 +2905,12 @@ class TestHistoryPopup(QDialog):
             ):
                 item = QTableWidgetItem(value)
 
-                if column_index in (0, 3):
+                item.setFlags(
+                    item.flags()
+                    & ~Qt.ItemFlag.ItemIsEditable
+                )
+
+                if column_index in (2, 3):
                     item.setTextAlignment(
                         Qt.AlignmentFlag.AlignCenter
                     )
@@ -2913,6 +2920,7 @@ class TestHistoryPopup(QDialog):
                     column_index,
                     item,
                 )
+
 
     def open_test_detail(
         self,
