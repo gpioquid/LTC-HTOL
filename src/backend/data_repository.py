@@ -116,7 +116,6 @@ class DataRepository:
 
                         output_on INTEGER NOT NULL DEFAULT 0,
                         psu_online INTEGER NOT NULL DEFAULT 0,
-                        psu_fault INTEGER NOT NULL DEFAULT 0,
 
                         notes TEXT NOT NULL DEFAULT '',
                         updated_at_ms INTEGER NOT NULL
@@ -137,7 +136,6 @@ class DataRepository:
 
                         output_on INTEGER NOT NULL DEFAULT 0,
                         psu_online INTEGER NOT NULL DEFAULT 0,
-                        psu_fault INTEGER NOT NULL DEFAULT 0,
 
                         FOREIGN KEY (psu_idx)
                             REFERENCES live_test_sessions(psu_idx)
@@ -217,7 +215,6 @@ class DataRepository:
 
                         output_on INTEGER NOT NULL DEFAULT 0,
                         psu_online INTEGER NOT NULL DEFAULT 0,
-                        psu_fault INTEGER NOT NULL DEFAULT 0,
 
                         FOREIGN KEY (test_session_id)
                             REFERENCES test_sessions(id)
@@ -323,7 +320,6 @@ class DataRepository:
                 calibration_complete,
                 output_on,
                 psu_online,
-                psu_fault,
                 notes,
                 updated_at_ms
             )
@@ -347,7 +343,6 @@ class DataRepository:
                     excluded.calibration_complete,
                 output_on = excluded.output_on,
                 psu_online = excluded.psu_online,
-                psu_fault = excluded.psu_fault,
                 notes = excluded.notes,
                 updated_at_ms = excluded.updated_at_ms
         """
@@ -377,7 +372,6 @@ class DataRepository:
                     int(psu.calibration_complete),
                     int(psu.power_on),
                     int(psu.online),
-                    int(psu.fault),
                     psu.notes or "",
                     now_ms,
                 )
@@ -412,7 +406,6 @@ class DataRepository:
                     calibration_complete,
                     output_on,
                     psu_online,
-                    psu_fault,
                     notes
                 FROM live_test_sessions
                 ORDER BY psu_idx
@@ -455,7 +448,6 @@ class DataRepository:
                     "notes": row["notes"] or "",
                     "power_on": bool(row["output_on"]),
                     "online": bool(row["psu_online"]),
-                    "fault": bool(row["psu_fault"]),
                 }
             )
 
@@ -557,7 +549,6 @@ class DataRepository:
             chamber_temperature,
             int(bool(psu.power_on)),
             int(bool(psu.online)),
-            int(bool(psu.fault)),
         )
 
         with self._write_lock:
@@ -590,7 +581,6 @@ class DataRepository:
                             chamber_temp_c,
                             output_on,
                             psu_online,
-                            psu_fault
                         )
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         """,
@@ -710,7 +700,6 @@ class DataRepository:
                         chamber_temp_c,
                         output_on,
                         psu_online,
-                        psu_fault
                     )
                     SELECT
                         ?,
@@ -720,7 +709,6 @@ class DataRepository:
                         chamber_temp_c,
                         output_on,
                         psu_online,
-                        psu_fault
                     FROM live_test_measurements
                     WHERE psu_idx = ?
                     ORDER BY measured_at_ms
@@ -766,7 +754,6 @@ class DataRepository:
                     chamber_temp_c,
                     output_on,
                     psu_online,
-                    psu_fault
                 FROM (
                     SELECT
                         measured_at_ms,
@@ -775,7 +762,6 @@ class DataRepository:
                         chamber_temp_c,
                         output_on,
                         psu_online,
-                        psu_fault
                     FROM live_test_measurements
                     WHERE psu_idx = ?
                     ORDER BY measured_at_ms DESC
@@ -811,9 +797,7 @@ class DataRepository:
                     "psu_online": bool(
                         row["psu_online"]
                     ),
-                    "psu_fault": bool(
-                        row["psu_fault"]
-                    ),
+
                 }
             )
 
@@ -835,7 +819,6 @@ class DataRepository:
                     chamber_temp_c,
                     output_on,
                     psu_online,
-                    psu_fault
                 FROM test_measurements
                 WHERE test_session_id = ?
                 ORDER BY measured_at_ms ASC, id ASC
@@ -868,9 +851,6 @@ class DataRepository:
                     ),
                     "psu_online": bool(
                         row["psu_online"]
-                    ),
-                    "psu_fault": bool(
-                        row["psu_fault"]
                     ),
                 }
             )
