@@ -441,7 +441,15 @@ class PSUChannelWidget(QFrame):
         self.style().polish(self)
         self.update()
 
-    def _state_name(self, psu):
+    def _state_name(self, psu) -> str:
+        # Open-fuse state must take priority over offline,
+        # running, paused, and idle states.
+        if getattr(
+            psu,
+            "open_fuse_detected",
+            False,
+        ):
+            return "open_fuse"
 
         if not psu.online:
             return "offline"
@@ -449,11 +457,14 @@ class PSUChannelWidget(QFrame):
         if psu.test_active and psu.power_on:
             return "running"
 
+        if psu.test_active and not psu.power_on:
+            return "paused"
+
         if psu.hours_elapsed > 0:
             return "paused"
 
         return "idle"
-
+    
     def update_state(self, psu):
         self.psu = psu
 
@@ -463,28 +474,119 @@ class PSUChannelWidget(QFrame):
         self.voltage_label.setText(f"{psu.voltage_v:.2f} V")
         self.current_label.setText(f"{psu.current_a:.2f} A")
 
-        self.status_label.setText(psu.status_str)
-
-        self.status_dot.setStyleSheet(
-            f"""
-            color: {psu.status_color};
-            font-size: 18px;
-            border: none;
-            """
+        open_fuse_detected = bool(
+            getattr(
+                psu,
+                "open_fuse_detected",
+                False,
+            )
         )
 
-        self.status_label.setStyleSheet(
-            f"""
-            QLabel {{
-                color: {psu.status_color};
-                background: {C["tile_bg"]};
-                border: 1px solid
-                    {psu.status_color};
-                border-radius: 5px;
-                padding: 4px 10px;
-            }}
-            """
-        )
+        if open_fuse_detected:
+            open_fuse_color = C.get(
+                "orange",
+                "#FF9F43",
+            )
+
+            self.status_label.setText(
+                "OPEN FUSE"
+            )
+
+            self.status_dot.setStyleSheet(
+                f"""
+                QLabel {{
+                    color: {open_fuse_color};
+                    font-size: 18px;
+                    border: none;
+                    background: transparent;
+                }}
+                """
+            )
+
+            self.status_label.setStyleSheet(
+                f"""
+                QLabel {{
+                    color: {open_fuse_color};
+                    background: {C["tile_bg"]};
+                    border: 1px solid
+                        {open_fuse_color};
+                    border-radius: 5px;
+                    padding: 4px 10px;
+                    font-weight: bold;
+                }}
+                """
+            )
+
+            measured_current = getattr(
+                psu,
+                "open_fuse_current_a",
+                None,
+            )
+
+            if measured_current is None:
+                current_message = ""
+            else:
+                current_message = (
+                    "\nDetected current: "
+                    f"{float(measured_current) * 1000:.3f} mA"
+                )
+
+            self.setToolTip(
+                "Open fuse detected.\n"
+                "The PSU output is OFF.\n"
+                "Click this machine card to continue "
+                "or end the test."
+                f"{current_message}"
+            )
+
+            self.click_hint.setText(
+                "Resolve →"
+            )
+
+            self.click_hint.setStyleSheet(
+                f"color: {open_fuse_color};"
+            )
+
+        else:
+            self.status_label.setText(
+                psu.status_str
+            )
+
+            self.status_dot.setStyleSheet(
+                f"""
+                QLabel {{
+                    color: {psu.status_color};
+                    font-size: 18px;
+                    border: none;
+                    background: transparent;
+                }}
+                """
+            )
+
+            self.status_label.setStyleSheet(
+                f"""
+                QLabel {{
+                    color: {psu.status_color};
+                    background: {C["tile_bg"]};
+                    border: 1px solid
+                        {psu.status_color};
+                    border-radius: 5px;
+                    padding: 4px 10px;
+                }}
+                """
+            )
+
+            self.setToolTip(
+                "Click this machine card to view "
+                "test details."
+            )
+
+            self.click_hint.setText(
+                "Details →"
+            )
+
+            self.click_hint.setStyleSheet("")
+
 
         target_hours = getattr(
             psu,

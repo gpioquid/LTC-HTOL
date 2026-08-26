@@ -45,6 +45,10 @@ class PSUState:
 
         self.last_db_sample_dt = None
 
+        self.open_fuse_detected = False
+        self.open_fuse_current_a = None
+        self.open_fuse_detected_at = None
+
         self.current_hist = deque(maxlen=MAX_HIST)
         self.voltage_hist = deque(maxlen=MAX_HIST)
         self.time_hist = deque(maxlen=MAX_HIST)

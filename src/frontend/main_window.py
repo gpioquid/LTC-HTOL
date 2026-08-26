@@ -719,6 +719,9 @@ class HTOLMonitor(QMainWindow):
         psu.power_on = False
         psu.hours_elapsed = 0.0
 
+        psu.open_fuse_detected = False
+        psu.open_fuse_current_a = None
+        psu.open_fuse_detected_at = None
         psu.calibrated_voltage = None
         psu.calibrated_current = None
 
@@ -848,9 +851,48 @@ class HTOLMonitor(QMainWindow):
             f"PSU{index + 1} setpoints updated: {voltage:.3f} V / {current:.3f} A"
         )
 
-    def _open_detail(self, index: int) -> None:
+    def _open_fuse_recovery_dialog(
+        self,
+        index: int,
+    ) -> None:
+        psu = self.psus[index]
+
+        if not psu.open_fuse_detected:
+            return
+
+        measured_current = (
+            psu.open_fuse_current_a
+        )
+
+        if measured_current is None:
+            measured_current = 0.0
+
+        dialog = OpenFuseRecoveryDialog(
+            parent=self,
+            psu=psu,
+            measured_current=float(
+                measured_current
+            ),
+            on_continue=(
+                self._continue_after_open_fuse
+            ),
+            on_end_test=self._complete_test,
+        )
+
+        self._show_dialog(dialog)
+
+    def _open_detail(
+        self,
+        index: int,
+    ) -> None:
         try:
             psu = self.psus[index]
+
+            if psu.open_fuse_detected:
+                self._open_fuse_recovery_dialog(
+                    index
+                )
+                return
 
             if psu.test_active:
                 dialog = PSUDetailPopup(
@@ -1386,7 +1428,10 @@ class HTOLMonitor(QMainWindow):
         event_data: dict,
     ) -> None:
         """
-        Open the recovery dialog on the Qt UI thread.
+        Latch the open-fuse state and update the machine card.
+
+        The recovery dialog opens only when the operator clicks
+        the affected machine card.
         """
 
         index = int(
@@ -1400,11 +1445,17 @@ class HTOLMonitor(QMainWindow):
         )
 
         psu.power_on = False
+        psu.open_fuse_detected = True
+        psu.open_fuse_current_a = measured_current
+        psu.open_fuse_detected_at = event_data.get(
+            "detected_at"
+        )
 
         channel = (
             self.psu_panel_widget
             .channel_widgets[index]
         )
+
         channel.update_state(psu)
 
         self._log(
@@ -1413,20 +1464,9 @@ class HTOLMonitor(QMainWindow):
             f"ETR:{psu.etr_number}  "
             f"Current:"
             f"{measured_current * 1000:.3f} mA  "
-            "OUTPUT OFF  WAITING FOR OPERATOR"
+            "OUTPUT OFF  CLICK MACHINE CARD "
+            "FOR RECOVERY"
         )
-
-        dialog = OpenFuseRecoveryDialog(
-            parent=self,
-            psu=psu,
-            measured_current=measured_current,
-            on_continue=(
-                self._continue_after_open_fuse
-            ),
-            on_end_test=self._complete_test,
-        )
-
-        self._show_dialog(dialog)
 
     def _continue_after_open_fuse(
         self,
@@ -1487,6 +1527,11 @@ class HTOLMonitor(QMainWindow):
             )
 
         psu.power_on = True
+
+        psu.open_fuse_detected = False
+        psu.open_fuse_current_a = None
+        psu.open_fuse_detected_at = None
+
 
         # Restart the grace period so the current ramp itself
         # cannot retrigger the open-fuse detector.

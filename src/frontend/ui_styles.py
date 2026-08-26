@@ -55,6 +55,17 @@ def font(spec):
 
 
 APP_STYLESHEET = f"""
+
+QFrame[machineState="openFuse"] {{
+    border: 2px solid #FF9F43;
+    background-color: #2B2118;
+}}
+
+QLabel[status="openFuse"] {{
+    color: #FF9F43;
+    font-weight: bold;
+}}
+
 QFrame#monitoringContainer {{
     background-color: #111C27;
     border: 1px solid #344B5E;
