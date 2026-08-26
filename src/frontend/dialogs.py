@@ -2010,6 +2010,17 @@ class TestHistoryPopup(QDialog):
         h.addWidget(self.search)
         root.addLayout(h)
         self.table = QTableWidget(0, 4)
+        self.table.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+
+        self.table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+
+        self.table.setSelectionMode(
+            QTableWidget.SelectionMode.SingleSelection
+        )
         self.table.setHorizontalHeaderLabels(["DATE", "ETR #", "TECHNICIAN", "DURATION"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.itemSelectionChanged.connect(self.show_detail)
