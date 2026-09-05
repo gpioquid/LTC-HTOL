@@ -9,6 +9,7 @@ dependencies=[
     "pyside6>=6.11.2",
     "python-dotenv>=1.0",
     "pyvisa>=1.16.2",
+    "pyvisa-py>=0.8.1",
 ]
 
 [dependency-groups]
